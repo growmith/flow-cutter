@@ -584,7 +584,16 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			if ( removeWhite && lum >= BG_LUMINANCE ) {
 				data[ i + 3 ] = 0; // quasi blanc -> transparent, comme le "fond" retire des SVG
 			} else {
-				var g = Math.round( displayGray( lum ).red * 255 ); // displayGray() renvoie du gris pur : R=G=B
+				// Conversion en niveaux de gris fidele : la luminance est utilisee telle
+				// quelle, sur toute la plage 0-255. On n'applique PAS displayGray() ici.
+				//
+				// displayGray() remappe vers [0.32, 0.95] pour qu'une forme vectorielle
+				// sombre ne se confonde pas avec le canvas noir : utile quand le dessin
+				// est fait d'aplats unis, ou seul compte le fait de distinguer les formes
+				// entre elles. Applique a une photo, ce meme remappage releve les noirs a
+				// 32 % de gris et pose un voile gris sur toute l'image : le contraste
+				// disparait, et l'apercu ne represente plus ce qui sera grave.
+				var g = Math.round( lum * 255 );
 				data[ i ] = g; data[ i + 1 ] = g; data[ i + 2 ] = g;
 			}
 		}
