@@ -2,7 +2,16 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- maximum-scale=1 et user-scalable=no : indispensables ici, pour deux raisons.
+     1) En mode "app sur l'ecran d'accueil", iOS laisse une echelle de vue residuelle apres
+        une bascule d'orientation, et n'offre aucun moyen d'en sortir : l'interface reste
+        zoomee sans possibilite de revenir en arriere. Safari normal, lui, reinitialise.
+     2) L'application a deja ses propres gestes a deux doigts pour redimensionner et faire
+        pivoter un calque. Le zoom de page du navigateur entrait en concurrence directe
+        avec eux et les rendait aleatoires.
+     Le confort de lecture n'en souffre pas : il n'y a pas de texte a agrandir sur le
+     canvas, et les champs du panneau sont deja a 16px. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>FLOW – Découpe SVG protège-bras</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -28,7 +37,9 @@
 		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 	}
 	* { box-sizing: border-box; }
-	html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); }
+	/* La page elle-meme ne defile jamais : seul le panneau lateral a un debordement.
+	   Sans cela, le mode app sur iOS derive en defilement et en echelle apres rotation. */
+	html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--text); }
 	body { display: flex; flex-direction: column; }
 
 	header {
@@ -44,9 +55,19 @@
 
 	main { flex: 1; display: flex; min-height: 0; }
 
-	.canvas-wrap { flex: 1; position: relative; background-color: #4b4f58;
-	}
-	canvas#stage { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+	/* min-width / min-height a 0 : un element flex refuse par defaut de devenir plus petit
+	   que son contenu. Sans ces deux lignes, le canvas empeche son propre conteneur de
+	   retrecir. */
+	.canvas-wrap { flex: 1; position: relative; min-width: 0; min-height: 0; background-color: #4b4f58; }
+
+	/* Le canvas est sorti du flux (position: absolute).
+	   resizeCanvas() lui fixe une taille en pixels, calculee d'apres son conteneur. Tant
+	   qu'il restait dans le flux, cette taille agissait en retour sur le conteneur : en
+	   passant du paysage au portrait, le canvas gardait l'ancienne largeur et forcait la
+	   page a rester plus large que l'ecran. iOS n'avait alors d'autre choix que de mettre
+	   la page a l'echelle, sans aucun moyen d'en sortir. Hors du flux, le canvas ne peut
+	   plus influencer la mesure dont il decoule. */
+	canvas#stage { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 
 	#dropZone {
 		position: absolute; inset: 0;
@@ -413,7 +434,7 @@
 		<!-- Marqueur de version. Sert a repondre en une seconde a la question "est-ce que
 		     la mise a jour est bien arrivee sur l'iPad ?", sans avoir a deviner d'apres le
 		     comportement. A incrementer a chaque deploiement. -->
-		<p id="buildTag">version 2026.08.25-6</p>
+		<p id="buildTag">version 2026.08.25-7</p>
 	</aside>
 </main>
 
@@ -808,6 +829,40 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		updateHandles(); // les poignees ont une taille ecran fixe : recalcul necessaire si le zoom change
 	}
 	window.addEventListener( 'resize', resizeCanvas );
+
+	// Bascule d'orientation. iOS signale encore les ANCIENNES dimensions au moment ou il
+	// declenche 'resize' / 'orientationchange' : un recalcul immediat dimensionne donc le
+	// canvas pour l'orientation precedente, ce qui donne exactement l'interface zoomee et
+	// coincee observee en mode app. On recalcule donc plusieurs fois de suite, jusqu'a ce
+	// que les dimensions se soient stabilisees. Le probleme ne se voit pas dans Safari
+	// classique, qui reinitialise son echelle de lui-meme.
+	function refreshAfterRotation() {
+		window.scrollTo( 0, 0 );
+		[ 60, 200, 450 ].forEach( function ( delay ) { setTimeout( resizeCanvas, delay ); } );
+	}
+	window.addEventListener( 'orientationchange', refreshAfterRotation );
+	if ( window.visualViewport ) {
+		// visualViewport suit l'echelle et la zone reellement visible, la ou window.innerWidth
+		// ne voit rien du zoom. C'est le seul signal fiable en mode app.
+		window.visualViewport.addEventListener( 'resize', resizeCanvas );
+	}
+
+	// Evenements de zoom propres a Safari iOS. touch-action: none ne suffit pas a les
+	// empecher en mode app : sans ce blocage explicite, un pincement destine a
+	// redimensionner un calque zoome la page a la place.
+	[ 'gesturestart', 'gesturechange', 'gestureend' ].forEach( function ( type ) {
+		document.addEventListener( type, function ( e ) { e.preventDefault(); }, { passive: false } );
+	} );
+
+	// Double tape : autre geste de zoom natif iOS, tout aussi genant sur un canvas.
+	( function blockDoubleTapZoom() {
+		var lastTouchEnd = 0;
+		document.addEventListener( 'touchend', function ( e ) {
+			var now = Date.now();
+			if ( now - lastTouchEnd <= 300 ) { e.preventDefault(); }
+			lastTouchEnd = now;
+		}, { passive: false } );
+	} )();
 
 	/* ---------- Etat : la pile de calques ---------- */
 
