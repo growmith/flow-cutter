@@ -64,6 +64,38 @@
 		background: rgba(29,32,39,0.7);
 	}
 	#emptyHint b { color: var(--text); }
+	.hintTouch { display: none; }   /* bascule dans la media query mobile */
+	body.text-input-open #dropZone { display: none; }   /* la cellule de saisie prend toute l'attention */
+
+	/* Cellule de saisie posee au centre du gabarit. Volontairement dans .canvas-wrap et
+	   non dans le panneau : le texte se tape la ou il va apparaitre. */
+	#textOverlay {
+		position: absolute;
+		left: 50%; top: 50%;
+		transform: translate(-50%, -50%);
+		width: min(78%, 340px);
+		z-index: 20;
+	}
+	#textOverlay[hidden] { display: none; }
+	#overlayTextInput {
+		width: 100%;
+		padding: 12px 14px;
+		font: inherit; font-size: 16px;   /* 16px : en dessous, Safari iOS zoome a la mise au point */
+		text-align: center;
+		color: var(--text);
+		background: rgba(29,32,39,0.96);
+		border: 2px solid var(--accent-2);
+		border-radius: 10px;
+		box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+		outline: none;
+	}
+	#textOverlayHint {
+		margin: 7px 0 0;
+		text-align: center;
+		font-size: 11.5px;
+		color: var(--text-dim);
+		text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+	}
 	#dropZone.over #emptyHint { border-color: var(--accent); color: var(--text); }
 
 	aside {
@@ -157,6 +189,8 @@
 		.canvas-wrap { position: absolute; inset: 0; }
 
 		#emptyHint { padding: 22px 18px; font-size: 13px; margin: 0 18px; }
+		.hintPointer { display: none; }
+		.hintTouch { display: block; }
 
 		aside {
 			position: fixed;
@@ -273,9 +307,23 @@
 		<canvas id="stage"></canvas>
 		<div id="dropZone">
 			<div id="emptyHint">
-				<b>Dépose un ou plusieurs fichiers SVG, PNG ou JPEG ici</b><br>
-				ou utilise le bouton « Ajouter un fichier ».
+				<!-- Deux messages : le glisser-deposer n'existe pas sur mobile, l'y annoncer
+				     n'aurait aucun sens. Bascule par media query, cf feuille de style. -->
+				<span class="hintPointer">
+					<b>Dépose un ou plusieurs fichiers SVG, PNG ou JPEG ici</b><br>
+					ou utilise le bouton « Ajouter un fichier ».
+				</span>
+				<span class="hintTouch">
+					<b>Commence à personnaliser ton protège-bras</b><br>
+					ajoute une image avec le bouton rose, ou du texte avec le bouton bleu.
+				</span>
 			</div>
+		</div>
+
+		<!-- Saisie posee sur le dessin : evite d'ouvrir la feuille pour taper un mot. -->
+		<div id="textOverlay" hidden>
+			<input type="text" id="overlayTextInput" placeholder="Votre texte…" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="done">
+			<p id="textOverlayHint">Entrée pour valider</p>
 		</div>
 	</div>
 
@@ -293,7 +341,7 @@
 			<label>Police à utiliser</label>
 			<select id="fontSelect"><option value="">Aucune police chargée</option></select>
 		</div>
-		<p class="hint" style="margin:-2px 0 16px;">Le texte est converti en tracés vectoriels à partir du fichier de police chargé : rendu garanti identique partout, y compris dans LightBurn, sans dépendre d'aucune police installée sur l'ordinateur qui ouvre le fichier. Toujours affiché et exporté en blanc.</p>
+		<p class="hint" style="margin:-2px 0 16px;">Cinq polices sont fournies, et tu peux en charger d'autres. Le texte est converti en tracés vectoriels à partir du fichier de police : rendu garanti identique partout, y compris dans LightBurn, sans dépendre d'aucune police installée sur l'ordinateur qui ouvre le fichier. Toujours affiché et exporté en blanc.</p>
 
 		<div class="field">
 			<label>Texte</label>
@@ -792,6 +840,8 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		fontSelect: document.getElementById( 'fontSelect' ),
 		btnAddText: document.getElementById( 'btnAddText' ),
 		fabText: document.getElementById( 'fabText' ),
+		textOverlay: document.getElementById( 'textOverlay' ),
+		overlayTextInput: document.getElementById( 'overlayTextInput' ),
 		layersList: document.getElementById( 'layersList' ),
 		layersEmpty: document.getElementById( 'layersEmpty' ),
 		positionControls: document.getElementById( 'positionControls' ),
@@ -1278,6 +1328,49 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		} );
 	}
 
+	/* ---------- Polices fournies avec l'application ---------- */
+
+	// Sans elles, l'application demarrait sans aucune police : le bouton texte ne servait
+	// a rien tant qu'on n'avait pas trouve puis charge un .ttf a la main, ce qui est
+	// particulierement penible sur telephone. Cinq familles couvrant des styles nettement
+	// differents, toutes sous licence SIL Open Font (redistribution autorisee, cf
+	// fonts/LICENSES.md), reduites au jeu de caracteres latin/francais : 132 Ko au total
+	// au lieu de 1,5 Mo pour les fichiers d'origine.
+	var BUNDLED_FONTS = [
+		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue \u2013 condensé, majuscules' },
+		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold \u2013 géométrique' },
+		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black \u2013 très gras' },
+		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black \u2013 neutre' },
+		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold \u2013 arrondi' }
+	];
+
+	function loadBundledFonts() {
+		if ( typeof fetch !== 'function' ) { return; }
+		BUNDLED_FONTS.forEach( function ( def, index ) {
+			fetch( def.file )
+				.then( function ( r ) {
+					if ( !r.ok ) { throw new Error( 'HTTP ' + r.status ); }
+					return r.arrayBuffer();
+				} )
+				.then( function ( buf ) {
+					fontLibrary.push( { id: nextFontId++, name: def.name, otFont: opentype.parse( buf ), order: index } );
+					// Les reponses n'arrivent pas dans l'ordre des requetes : on retrie pour que
+					// la liste deroulante presente toujours les polices dans le meme ordre.
+					// Les polices chargees par l'utilisateur (pas d'ordre defini) passent apres.
+					fontLibrary.sort( function ( a, b ) {
+						return ( a.order === undefined ? 999 : a.order ) - ( b.order === undefined ? 999 : b.order );
+					} );
+					renderFontOptions();
+				} )
+				.catch( function ( e ) {
+					// Une police manquante ne doit pas empecher l'application de fonctionner :
+					// les autres restent disponibles, et le chargement manuel aussi.
+					if ( window.console ) { console.warn( 'Police fournie illisible : ' + def.file + ' (' + e.message + ')' ); }
+				} );
+		} );
+	}
+	loadBundledFonts();
+
 	function loadFontFile( file ) {
 		var reader = new FileReader();
 		reader.onload = function () {
@@ -1361,11 +1454,16 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			x += ( glyph.advanceWidth || 0 ) * fontScale;
 		} );
 
-		if ( compound.children.length ) { compound.scale( 1, -1, new paper.Point( 0, 0 ) ); }
+		// Pas de retournement vertical ici. glyph.getPath() d'opentype.js renvoie deja des
+		// coordonnees ecran, axe Y vers le bas : la bibliotheque a inverse en interne l'axe
+		// Y montant du format de police. Rajouter un scale( 1, -1 ) retournait donc le trace
+		// une seconde fois et affichait tout le texte a l'envers.
 		return compound;
 	}
 
-	function addTextLayer( content, fontId ) {
+	// keepSheetClosed : appel venant de la cellule posee sur le dessin. On ne deplie alors
+	// pas la feuille, sinon elle recouvre immediatement le texte qu'on vient de creer.
+	function addTextLayer( content, fontId, keepSheetClosed ) {
 		var fontEntry = findFont( fontId );
 		if ( !fontEntry ) { log( 'Charge d\'abord une police (.ttf ou .otf) avant d\'ajouter du texte.', true ); return; }
 
@@ -1402,7 +1500,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 
 		setMode( 'edit' );
 		resizeCanvas();
-		sheetSetOpen( true ); // un calque vient d'etre ajoute : on montre ses reglages (mobile)
+		if ( !keepSheetClosed ) { sheetSetOpen( true ); } // ajout depuis le panneau : on montre les reglages
 	}
 
 	// Edite un calque texte existant en place (contenu et/ou police) : reconstruit les
@@ -1482,19 +1580,63 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		els.textContent.blur(); // referme le clavier : le calque vient d'apparaitre, on veut le voir
 	} );
 
-	// Bouton flottant "T" : ouvre la feuille et donne le focus au champ texte dans la foulee.
-	// Le focus doit etre demande de facon SYNCHRONE a l'interieur du gestionnaire de clic :
-	// iOS ne leve le clavier que si la demande provient directement d'un geste utilisateur,
-	// un focus differe (setTimeout, fin d'animation) est ignore sans erreur.
-	if ( els.fabText ) {
-		els.fabText.addEventListener( 'click', function () {
+	/* ---------- Saisie de texte posee sur le dessin ---------- */
+
+	// Le bouton flottant "T" n'ouvre pas la feuille : il pose une cellule de saisie au
+	// centre du gabarit, exactement la ou le texte va apparaitre. Passer par le panneau
+	// imposait deux allers-retours (deplier pour taper, replier pour voir le resultat)
+	// pour un seul mot. Le seul cas ou la feuille s'ouvre est l'absence de police chargee,
+	// puisque le chargement s'y trouve et qu'aucun trace ne peut etre produit sans elle.
+	var textOverlayBusy = false; // garde-fou : evite qu'un blur declenche pendant la fermeture ne reboucle
+
+	function openTextOverlay() {
+		if ( !els.textOverlay || !els.overlayTextInput ) { return; }
+		if ( !parseInt( els.fontSelect.value, 10 ) ) {
 			sheetSetOpen( true );
-			if ( !els.textContent ) { return; }
-			els.textContent.focus();
-			els.textContent.scrollIntoView( { block: 'center' } );
-			if ( !parseInt( els.fontSelect.value, 10 ) ) {
-				log( 'Charge d\'abord une police (.ttf ou .otf) : le texte est converti en traces vectoriels a partir du fichier de police.', true );
-			}
+			log( 'Charge d\'abord une police (.ttf ou .otf) : le texte est converti en traces vectoriels a partir du fichier de police.', true );
+			return;
+		}
+		sheetSetOpen( false );
+		document.body.classList.add( 'text-input-open' ); // masque l'encart d'accueil, qui se superposerait
+		els.overlayTextInput.value = '';
+		els.textOverlay.hidden = false;
+		// Focus SYNCHRONE dans le gestionnaire de clic : iOS ne leve le clavier que si la
+		// demande vient directement d'un geste utilisateur. Un focus differe (setTimeout,
+		// fin de transition) est ignore silencieusement.
+		els.overlayTextInput.focus();
+	}
+
+	function closeTextOverlay() {
+		if ( !els.textOverlay ) { return; }
+		textOverlayBusy = true;
+		document.body.classList.remove( 'text-input-open' );
+		els.textOverlay.hidden = true;
+		els.overlayTextInput.blur();
+		textOverlayBusy = false;
+	}
+
+	function commitTextOverlay() {
+		if ( !els.overlayTextInput || els.textOverlay.hidden ) { return; }
+		var content = els.overlayTextInput.value.trim();
+		var fontId = parseInt( els.fontSelect.value, 10 );
+		closeTextOverlay();
+		if ( !content || !fontId ) { return; }
+		addTextLayer( content, fontId, true ); // true : on laisse la feuille fermee
+	}
+
+	if ( els.fabText ) {
+		els.fabText.addEventListener( 'click', openTextOverlay );
+	}
+	if ( els.overlayTextInput ) {
+		els.overlayTextInput.addEventListener( 'keydown', function ( e ) {
+			if ( e.key === 'Enter' ) { e.preventDefault(); commitTextOverlay(); }
+			else if ( e.key === 'Escape' ) { e.preventDefault(); closeTextOverlay(); }
+		} );
+		// Le bouton "OK"/"Terminer" du clavier iOS ne produit pas toujours un Enter : il
+		// se contente de rendre le focus. On valide donc aussi a la perte de focus, ce qui
+		// couvre au passage l'utilisateur qui touche le dessin pour sortir de la saisie.
+		els.overlayTextInput.addEventListener( 'blur', function () {
+			if ( !textOverlayBusy ) { commitTextOverlay(); }
 		} );
 	}
 

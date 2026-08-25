@@ -10,4 +10,7 @@ COPY icon-192.png /usr/share/nginx/html/icon-192.png
 COPY icon-512.png /usr/share/nginx/html/icon-512.png
 COPY favicon-32.png /usr/share/nginx/html/favicon-32.png
 
+# Polices fournies avec l'application (SIL Open Font License, cf fonts/LICENSES.md).
+COPY fonts/ /usr/share/nginx/html/fonts/
+
 EXPOSE 80
