@@ -139,6 +139,8 @@
 	.status.err { background: rgba(255,92,92,0.1); color: var(--err); border: 1px solid rgba(255,92,92,0.3); }
 	.status:empty { display: none; }
 
+	#buildTag { margin: 16px 0 0; font-size: 11px; color: var(--text-dim); opacity: .65; text-align: center; }
+
 	.section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
 
 	.field input[type=text] {
@@ -407,6 +409,11 @@
 		</div>
 
 		<div id="status" class="status"></div>
+
+		<!-- Marqueur de version. Sert a repondre en une seconde a la question "est-ce que
+		     la mise a jour est bien arrivee sur l'iPad ?", sans avoir a deviner d'apres le
+		     comportement. A incrementer a chaque deploiement. -->
+		<p id="buildTag">version 2026.08.25-6</p>
 	</aside>
 </main>
 
@@ -1837,9 +1844,21 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		};
 	}
 
+	// Sans selection prealable, un pincement ne doit pas rester sans effet : on prend alors
+	// le calque du dessus. Poser deux doigts sur une zone vide du gabarit est un geste
+	// courant, et ne rien voir bouger donne l'impression que la fonction est absente.
+	function layerForGesture() {
+		var sel = selectedLayer();
+		if ( sel ) { return sel; }
+		if ( !layers.length ) { return null; }
+		var top = layers[ layers.length - 1 ];
+		selectLayer( top.id );
+		return top;
+	}
+
 	canvas.addEventListener( 'touchstart', function ( e ) {
 		if ( mode !== 'edit' || e.touches.length !== 2 ) { return; }
-		var sel = selectedLayer();
+		var sel = layerForGesture();
 		if ( !sel ) { return; }
 		e.preventDefault();
 		var p = touchPair( e );
