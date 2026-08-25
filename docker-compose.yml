@@ -3,19 +3,40 @@ services:
     build: .
     container_name: flow-cutter
     restart: unless-stopped
+
+    # Le port 80 du conteneur est publie sur le port 8090 de l'hote.
+    # Nginx Proxy Manager pointe dessus : Scheme "http" (surtout pas https,
+    # nginx ne fait pas de TLS ici), Forward Hostname 192.168.1.37,
+    # Forward Port 8090.
     ports:
       - "8090:80"
-    # Par defaut : le port 80 du conteneur est publie sur le port 8080 de la machine hote.
-    # Pointez votre reverse proxy vers http://<ip-du-serveur>:8080 (ou changez "8080" ici
-    # pour un autre port libre). C'est le plus simple, et ca marche quel que soit votre
-    # reverse proxy (Traefik, nginx, Caddy, nginx-proxy, etc.), y compris quand ce stack
-    # est deploye depuis Portainer sans reseau Docker partage prealable.
-    #
-    # Alternative : si votre reverse proxy tourne lui-meme dans Docker et que vous
-    # preferez le relier directement via le reseau Docker interne (sans exposer de port
-    # sur l'hote), commentez "ports:" ci-dessus et decommentez les lignes "networks:"
-    # ci-dessous - en remplacant "reverse-proxy" par le nom du reseau Docker externe que
-    # votre proxy utilise deja.
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/index.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # L'app est 100% statique : nginx n'a besoin d'ecrire nulle part de facon
+    # persistante, on peut donc durcir le conteneur sans rien casser.
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+
+    # Alternative plus propre : si Nginx Proxy Manager tourne sur le meme hote
+    # Docker, mettez les deux conteneurs sur un reseau commun, supprimez le bloc
+    # "ports:" ci-dessus, et pointez NPM sur Hostname "flow-cutter" / Port 80.
+    # L'app n'est alors plus exposee sur le reseau local, uniquement via le proxy.
     # networks:
     #   - reverse-proxy
 
