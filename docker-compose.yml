@@ -4,7 +4,7 @@ services:
     container_name: flow-cutter
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8090:80"
     # Par defaut : le port 80 du conteneur est publie sur le port 8080 de la machine hote.
     # Pointez votre reverse proxy vers http://<ip-du-serveur>:8080 (ou changez "8080" ici
     # pour un autre port libre). C'est le plus simple, et ca marche quel que soit votre
