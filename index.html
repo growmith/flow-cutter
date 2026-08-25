@@ -143,7 +143,7 @@
 	   aucun saut de zoom a l'ouverture/fermeture). */
 
 	#sheetHandle { display: none; }
-	.fab { display: none; }
+	.fabStack { display: none; }
 
 	@media (max-width: 860px) {
 		header {
@@ -213,23 +213,35 @@
 		}
 		body.sheet-open #sheetHandleLabel::after { transform: rotate(45deg) translate(-2px, -2px); }
 
-		/* Bouton d'ajout flottant : l'action la plus frequente reste accessible
-		   sans ouvrir la feuille. Il s'efface quand la feuille est ouverte. */
-		.fab {
-			display: flex; align-items: center; justify-content: center;
+		/* Boutons flottants : les deux ajouts les plus frequents (image, texte) restent
+		   accessibles sans ouvrir la feuille. Ils s'effacent quand elle est ouverte. */
+		.fabStack {
+			display: flex; flex-direction: column; gap: 12px;
 			position: fixed;
 			right: calc(16px + env(safe-area-inset-right));
 			bottom: calc(var(--sheet-peek) + 18px + env(safe-area-inset-bottom));
+			z-index: 25;
+			transition: opacity .2s, transform .3s cubic-bezier(.32,.72,0,1);
+		}
+		body.sheet-open .fabStack { opacity: 0; pointer-events: none; transform: translateY(14px); }
+
+		.fab {
+			display: flex; align-items: center; justify-content: center;
+			position: static;
 			width: 54px; height: 54px;
 			margin: 0; padding: 0;
 			border: none; border-radius: 50%;
 			background: var(--accent); color: #fff;
 			font-size: 30px; font-weight: 300; line-height: 1;
 			box-shadow: 0 6px 18px rgba(0,0,0,0.45);
-			z-index: 25;
-			transition: opacity .2s, transform .3s cubic-bezier(.32,.72,0,1);
 		}
-		body.sheet-open .fab { opacity: 0; pointer-events: none; transform: translateY(14px); }
+		.fab.fabSecondary {
+			width: 46px; height: 46px;
+			align-self: center;
+			background: var(--accent-2);
+			font-size: 19px; font-weight: 700;
+		}
+		.fab:active { filter: brightness(1.15); }
 
 		/* Cibles tactiles : 44px minimum, et 16px sur les champs pour empecher
 		   Safari iOS de zoomer automatiquement a la mise au point. */
@@ -350,8 +362,12 @@
 	</aside>
 </main>
 
-<!-- Mobile uniquement : raccourci vers le meme <input type=file> que le bouton du panneau. -->
-<label for="fileInput" class="fab" id="fabAdd" title="Ajouter un fichier" aria-label="Ajouter un fichier">+</label>
+<!-- Mobile uniquement : raccourcis vers les deux ajouts les plus frequents. Le bouton
+     image declenche le meme <input type=file> que celui du panneau. -->
+<div class="fabStack">
+	<button type="button" class="fab fabSecondary" id="fabText" title="Ajouter du texte" aria-label="Ajouter du texte">T</button>
+	<label for="fileInput" class="fab" id="fabAdd" title="Ajouter une image" aria-label="Ajouter une image">+</label>
+</div>
 
 <script>
 window.__GUARD_DATA__ = {"canvasW_mm": 65.9766, "canvasH_mm": 130.715, "contours": [{"parent": -1, "points": [[32.639, -2.54], [28.67, -2.35], [24.924, -1.81], [14.351, 0.191], [12.859, 0.603], [11.652, 1.27], [10.668, 2.191], [10.033, 3.143], [9.081, 5.461], [8.922, 5.683], [7.969, 6.001], [4.128, 6.572], [2.921, 6.858], [1.27, 7.557], [0.191, 8.287], [-1.302, 9.874], [-1.651, 10.382], [-2.096, 11.303], [-2.508, 12.859], [-2.572, 14.478], [-1.905, 24.289], [-1.715, 25.368], [-1.207, 26.48], [-0.476, 27.432], [0.032, 27.908], [1.302, 28.67], [1.524, 28.924], [6.795, 106.712], [6.064, 107.252], [5.271, 108.045], [4.763, 108.712], [4.382, 109.474], [4.096, 110.395], [4.032, 111.76], [4.35, 116.11], [4.509, 117.158], [4.699, 117.824], [5.048, 118.682], [5.652, 119.634], [6.572, 120.682], [7.525, 121.507], [7.906, 121.761], [9.62, 122.555], [13.43, 123.698], [14.764, 126.683], [15.208, 127.508], [16.161, 128.556], [16.955, 129.128], [18.034, 129.636], [22.86, 131.445], [25.464, 132.271], [27.908, 132.842], [31.02, 133.192], [33.179, 133.255], [35.56, 133.128], [37.529, 132.874], [40.196, 132.303], [42.799, 131.445], [47.657, 129.667], [48.8, 129.128], [49.53, 128.62], [50.483, 127.54], [50.959, 126.651], [52.261, 123.73], [56.61, 122.396], [58.134, 121.571], [58.769, 121.095], [59.658, 120.206], [60.23, 119.444], [60.801, 118.428], [61.182, 117.348], [61.373, 116.173], [61.69, 111.824], [61.595, 110.458], [61.278, 109.379], [60.96, 108.776], [60.452, 108.109], [59.658, 107.315], [58.96, 106.839], [58.992, 105.569], [64.389, 28.988], [64.707, 28.67], [65.5, 28.258], [66.389, 27.496], [67.024, 26.702], [67.628, 25.432], [67.85, 24.384], [68.517, 14.542], [68.517, 13.113], [68.104, 11.557], [67.596, 10.478], [66.77, 9.335], [65.754, 8.35], [64.675, 7.62], [63.024, 6.922], [61.817, 6.636], [58.007, 6.064], [57.023, 5.747], [56.071, 3.493], [55.499, 2.508], [54.515, 1.461], [53.213, 0.667], [52.102, 0.318], [41.053, -1.81], [37.306, -2.35]]}, {"parent": 0, "points": [[17.399, 6.731], [17.748, 5.906], [18.161, 5.334], [19.082, 4.54], [19.939, 4.159], [20.86, 4.001], [26.543, 4.001], [27.623, 4.191], [28.829, 4.763], [29.845, 5.715], [30.385, 6.604], [30.925, 6.382], [31.782, 6.191], [32.449, 6.128], [33.369, 6.16], [34.385, 6.35], [34.957, 6.572], [35.878, 6.604], [36.513, 6.731], [37.529, 7.176], [38.005, 7.557], [38.799, 7.176], [39.529, 6.985], [40.767, 6.985], [41.656, 7.239], [41.974, 6.636], [42.545, 6.033], [43.275, 5.62], [43.656, 5.493], [44.228, 5.429], [46.482, 5.493], [47.403, 5.906], [48.165, 6.668], [48.451, 7.176], [48.609, 7.684], [48.641, 8.604], [47.117, 14.256], [46.577, 15.812], [46.069, 16.732], [45.212, 17.653], [44.863, 17.907], [44.069, 18.288], [43.021, 18.479], [41.942, 18.383], [40.926, 17.971], [40.132, 17.367], [39.529, 17.875], [38.672, 18.288], [37.973, 18.447], [37.275, 18.479], [36.703, 18.415], [36.005, 18.193], [35.37, 17.844], [34.29, 18.256], [33.02, 18.447], [29.337, 18.447], [28.702, 18.383], [27.496, 18.066], [26.226, 17.399], [25.051, 16.32], [24.384, 15.304], [24.384, 15.939], [24.194, 16.669], [23.781, 17.367], [23.178, 17.939], [22.574, 18.256], [22.003, 18.415], [20.034, 18.447], [19.241, 18.32], [18.352, 17.844], [17.621, 17.018], [17.304, 16.161], [17.272, 7.334]]}], "logoBox": {"x": 19.7803, "y": 6.5088, "w": 26.3843, "h": 9.4933}};
@@ -642,6 +658,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	var HANDLE_PX = 9;     // taille des poignees a l'ecran, en pixels (constante quel que soit le zoom)
 	var ROTATE_OFFSET_PX = 26; // distance ecran entre le haut de la boite et la poignee de rotation
 
+	// Ecran tactile : un doigt ne vise pas au pixel pres, et il masque ce qu'il touche.
+	// Les poignees sont donc agrandies et eloignees de la boite de selection.
+	var COARSE_POINTER = !!( window.matchMedia && window.matchMedia( '(pointer: coarse)' ).matches );
+	if ( COARSE_POINTER ) { HANDLE_PX = 15; ROTATE_OFFSET_PX = 38; }
+
 	var selBox = new paper.Path( { insert: false, closed: true } );
 	selBox.strokeColor = '#2b7fff';
 	selBox.strokeWidth = 1;
@@ -702,6 +723,27 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		paper.view.center = new paper.Point( W / 2, H / 2 );
 	}
 
+	// Ramene un calque a l'interieur du gabarit s'il en deborde.
+	//
+	// Seul le cas "ca ne rentre pas" est corrige : un element deja plus petit n'est jamais
+	// agrandi, sa taille reelle est une information (un SVG declare ses millimetres, on ne
+	// va pas la trahir). En revanche un fichier trop grand doit etre ramene a l'ecran :
+	// une photo de 40 Mpx ou un SVG dessine a l'echelle d'une affiche arrivait sinon des
+	// dizaines de fois plus grand que le protege-bras, invisible et impossible a attraper.
+	//
+	// Les deux dimensions sont prises en compte : ne contraindre que la largeur laissait
+	// deborder verticalement toutes les images en format portrait.
+	var IMPORT_FIT_RATIO = 0.9;    // marge : on vise 90 % du gabarit, pas le bord a bord
+	function fitIntoGuard( item ) {
+		var maxW = W * IMPORT_FIT_RATIO, maxH = H * IMPORT_FIT_RATIO;
+		var b = item.bounds;
+		if ( b.width <= 0 || b.height <= 0 ) { return 1; }
+		if ( b.width <= maxW && b.height <= maxH ) { return 1; }   // rentre deja : on n'y touche pas
+		var factor = Math.min( maxW / b.width, maxH / b.height );
+		item.scale( factor, item.position );
+		return factor;
+	}
+
 	function resizeCanvas() {
 		var rect = canvas.parentElement.getBoundingClientRect();
 		canvas.style.width = rect.width + 'px';
@@ -749,6 +791,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		btnLoadFont: document.getElementById( 'btnLoadFont' ),
 		fontSelect: document.getElementById( 'fontSelect' ),
 		btnAddText: document.getElementById( 'btnAddText' ),
+		fabText: document.getElementById( 'fabText' ),
 		layersList: document.getElementById( 'layersList' ),
 		layersEmpty: document.getElementById( 'layersEmpty' ),
 		positionControls: document.getElementById( 'positionControls' ),
@@ -1095,6 +1138,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		designLayer.addChild( clean );
 		clean.position = new paper.Point( W / 2, H / 2 );
 
+		// Taille declaree par le fichier, avant toute reduction : c'est elle qu'on annonce
+		// a l'utilisateur, la reduction eventuelle etant signalee a part.
+		var detectedW = clean.bounds.width, detectedH = clean.bounds.height;
+		var fitFactor = fitIntoGuard( clean );
+
 		var layer = {
 			id: nextLayerId++,
 			kind: 'svg',
@@ -1110,8 +1158,12 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		layers.push( layer );
 		selectLayer( layer.id );
 
-		var msg = 'Fichier ajoute : ' + filename + ' (' + layer.baseWidthMM.toFixed( 1 ) + ' x ' + clean.bounds.height.toFixed( 1 ) + ' mm detectes).';
+		var msg = 'Fichier ajoute : ' + filename + ' (' + detectedW.toFixed( 1 ) + ' x ' + detectedH.toFixed( 1 ) + ' mm detectes).';
 		if ( detect.note ) { msg += ' ' + detect.note; }
+		if ( fitFactor < 1 ) {
+			msg += ' Trop grand pour le gabarit : ramene a ' + Math.round( fitFactor * 100 ) + ' % (' +
+				clean.bounds.width.toFixed( 1 ) + ' x ' + clean.bounds.height.toFixed( 1 ) + ' mm) pour tenir entierement dedans.';
+		}
 		log( msg, false );
 
 		setMode( 'edit' );
@@ -1157,6 +1209,10 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		var wrap = new paper.Group( [ raster ] );
 		designLayer.addChild( wrap );
 		wrap.position = new paper.Point( W / 2, H / 2 );
+
+		// La largeur par defaut ci-dessus ne contraint que l'horizontale : une image en
+		// format portrait depassait largement en hauteur. fitIntoGuard() rattrape ce cas.
+		fitIntoGuard( wrap );
 
 		var layer = {
 			id: nextLayerId++,
@@ -1423,7 +1479,32 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		if ( !fontId ) { log( 'Charge d\'abord une police (.ttf ou .otf) avant d\'ajouter du texte.', true ); return; }
 		addTextLayer( content, fontId );
 		els.textContent.value = '';
+		els.textContent.blur(); // referme le clavier : le calque vient d'apparaitre, on veut le voir
 	} );
+
+	// Bouton flottant "T" : ouvre la feuille et donne le focus au champ texte dans la foulee.
+	// Le focus doit etre demande de facon SYNCHRONE a l'interieur du gestionnaire de clic :
+	// iOS ne leve le clavier que si la demande provient directement d'un geste utilisateur,
+	// un focus differe (setTimeout, fin d'animation) est ignore sans erreur.
+	if ( els.fabText ) {
+		els.fabText.addEventListener( 'click', function () {
+			sheetSetOpen( true );
+			if ( !els.textContent ) { return; }
+			els.textContent.focus();
+			els.textContent.scrollIntoView( { block: 'center' } );
+			if ( !parseInt( els.fontSelect.value, 10 ) ) {
+				log( 'Charge d\'abord une police (.ttf ou .otf) : le texte est converti en traces vectoriels a partir du fichier de police.', true );
+			}
+		} );
+	}
+
+	// Entree vaut validation. Sur telephone le clavier recouvre le bouton d'ajout : sans ca
+	// il faudrait le refermer a la main avant de pouvoir valider.
+	if ( els.textContent ) {
+		els.textContent.addEventListener( 'keydown', function ( e ) {
+			if ( e.key === 'Enter' ) { e.preventDefault(); els.btnAddText.click(); }
+		} );
+	}
 
 	// Edition en place d'un calque texte deja cree : cliquer sur ce calque (liste ou dessin)
 	// le selectionne, ce qui affiche et pre-remplit ces deux champs (cf updateSelectionUI).
@@ -1474,12 +1555,42 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 
 	var tool = new paper.Tool();
 	var dragMode = null; // 'move' | 'rotate' | 'resize'
+
+	// Geste a deux doigts en cours. Declare ici (et pas plus bas) parce que les gestionnaires
+	// de paper.js, definis juste apres, doivent pouvoir le consulter pour s'effacer.
+	var pinching = false;
 	var dragStartAngle = 0, dragStartRotation = 0;
 	var resizeAnchor = null, resizeStartDist = 0, resizeStartWidth = 0;
 
-	function handleTolerance() { return ( HANDLE_PX * 1.4 ) / paper.view.zoom; }
+	// Rayon d'accroche autour d'une poignee. Nettement plus large au doigt qu'a la souris :
+	// sans cela, attraper la poignee de rotation sur telephone releve de l'exploit.
+	function handleTolerance() { return ( HANDLE_PX * ( COARSE_POINTER ? 2.6 : 1.4 ) ) / paper.view.zoom; }
+
+	/* ---------- Magnetisme de rotation ---------- */
+
+	var SNAP_STEP_DEG = 15;        // angles remarquables : 0, 15, 30, 45, 60, 75, 90...
+	var SNAP_TOLERANCE_DEG = 4;    // ecart en dessous duquel l'angle s'accroche
+
+	// Tomber pile sur 0, 45 ou 90 degres a la main releve de la chance, surtout au doigt.
+	// Des que l'angle passe a moins de 4 degres d'un multiple de 15, il s'y colle.
+	// Maintenir Alt pendant le glisser (souris) desactive l'accroche pour un reglage libre.
+	function snapRotation( deg, disabled ) {
+		if ( disabled ) { setSnapFeedback( false ); return deg; }
+		var nearest = Math.round( deg / SNAP_STEP_DEG ) * SNAP_STEP_DEG;
+		var snapped = Math.abs( deg - nearest ) <= SNAP_TOLERANCE_DEG;
+		setSnapFeedback( snapped );
+		return snapped ? nearest : deg;
+	}
+
+	// Retour visuel : sans lui, l'accroche donne l'impression que la rotation "colle"
+	// sans raison. La poignee et sa tige passent en rose tant que l'angle est accroche.
+	function setSnapFeedback( on ) {
+		rotateHandle.fillColor = on ? '#ff008c' : '#ffffff';
+		rotateLine.strokeColor = on ? '#ff008c' : '#2b7fff';
+	}
 
 	tool.onMouseDown = function ( event ) {
+		if ( pinching ) { return; } // geste a deux doigts en cours : paper.js ne doit pas s'en meler
 		if ( mode !== 'edit' ) { return; }
 		var tol = handleTolerance();
 		var sel = selectedLayer();
@@ -1521,14 +1632,14 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		}
 	};
 	tool.onMouseDrag = function ( event ) {
-		if ( mode !== 'edit' || !dragMode ) { return; }
+		if ( mode !== 'edit' || !dragMode || pinching ) { return; }
 		var sel = selectedLayer();
 		if ( !sel ) { return; }
 		if ( dragMode === 'rotate' ) {
 			var c = sel.item.position;
 			var ang = Math.atan2( event.point.y - c.y, event.point.x - c.x ) * 180 / Math.PI;
 			var newRotation = dragStartRotation + ( ang - dragStartAngle );
-			applyRotation( sel, newRotation );
+			applyRotation( sel, snapRotation( newRotation, !!( event.modifiers && event.modifiers.option ) ) );
 		} else if ( dragMode === 'resize' ) {
 			if ( resizeStartDist > 0.001 ) {
 				var newDist = event.point.getDistance( resizeAnchor );
@@ -1540,7 +1651,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			updateHandles();
 		}
 	};
-	tool.onMouseUp = function () { dragMode = null; };
+	tool.onMouseUp = function () { dragMode = null; setSnapFeedback( false ); };
 
 	// Curseur adapte quand la souris survole une poignee (retour visuel avant le clic).
 	canvas.addEventListener( 'mousemove', function ( e ) {
@@ -1563,6 +1674,82 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		var newWidth = sel.item.bounds.width * factor;
 		applyWidth( sel, newWidth );
 	}, { passive: false } );
+
+	/* ---------- Gestes a deux doigts (mobile / tablette) ---------- */
+
+	// Pincer redimensionne le calque selectionne, tourner l'oriente. Ces gestes sont geres
+	// directement au niveau des evenements tactiles, et non via paper.js : son outil ne
+	// connait qu'un seul point de contact, et continuerait a interpreter le premier doigt
+	// comme un simple glisser pendant tout le pincement. D'ou le drapeau "pinching", qui
+	// neutralise le glisser de paper.js le temps du geste.
+	var pinchStartDist = 0, pinchStartWidth = 0;
+	var pinchStartAngle = 0, pinchStartRotation = 0, pinchRotateActive = false;
+	var PINCH_ROTATE_DEADZONE_DEG = 8; // en dessous, on considere que l'intention est de zoomer, pas de tourner
+
+	function touchPair( e ) {
+		var a = e.touches[ 0 ], b = e.touches[ 1 ];
+		var dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+		return {
+			dist: Math.sqrt( dx * dx + dy * dy ),
+			angle: Math.atan2( dy, dx ) * 180 / Math.PI
+		};
+	}
+
+	canvas.addEventListener( 'touchstart', function ( e ) {
+		if ( mode !== 'edit' || e.touches.length !== 2 ) { return; }
+		var sel = selectedLayer();
+		if ( !sel ) { return; }
+		e.preventDefault();
+		var p = touchPair( e );
+		pinching = true;
+		dragMode = null;              // annule le glisser a un doigt entame juste avant
+		pinchRotateActive = false;
+		pinchStartDist = p.dist;
+		pinchStartAngle = p.angle;
+		pinchStartWidth = sel.item.bounds.width;
+		pinchStartRotation = sel.currentRotation;
+	}, { passive: false } );
+
+	canvas.addEventListener( 'touchmove', function ( e ) {
+		if ( !pinching || e.touches.length !== 2 ) { return; }
+		var sel = selectedLayer();
+		if ( !sel ) { return; }
+		e.preventDefault();
+		var p = touchPair( e );
+
+		if ( pinchStartDist > 0 ) {
+			applyWidth( sel, pinchStartWidth * ( p.dist / pinchStartDist ) );
+		}
+
+		// L'angle entre deux doigts varie toujours un peu pendant un pincement. Sans zone
+		// morte, le calque pivoterait a chaque fois qu'on cherche juste a l'agrandir. On
+		// n'entre donc en rotation qu'apres un ecart franc, et on repart de l'angle courant
+		// pour que le calque ne saute pas d'un coup au moment du basculement.
+		var dAng = p.angle - pinchStartAngle;
+		while ( dAng > 180 ) { dAng -= 360; }
+		while ( dAng < -180 ) { dAng += 360; }
+
+		if ( !pinchRotateActive && Math.abs( dAng ) > PINCH_ROTATE_DEADZONE_DEG ) {
+			pinchRotateActive = true;
+		}
+		if ( pinchRotateActive ) {
+			// Une fois la rotation engagee, on applique l'ecart COMPLET depuis le debut du
+			// geste, sans retrancher la zone morte. Le calque suit alors exactement l'angle
+			// des doigts : tourner de 45 degres donne 45 degres. Retrancher la zone morte
+			// aurait installe un decalage permanent de 8 degres pour tout le reste du geste,
+			// bien plus genant que le petit saut unique au moment ou la rotation s'amorce.
+			applyRotation( sel, snapRotation( pinchStartRotation + dAng, false ) );
+		}
+	}, { passive: false } );
+
+	function endPinch() {
+		if ( !pinching ) { return; }
+		pinching = false;
+		pinchRotateActive = false;
+		setSnapFeedback( false );
+	}
+	canvas.addEventListener( 'touchend', function ( e ) { if ( e.touches.length < 2 ) { endPinch(); } } );
+	canvas.addEventListener( 'touchcancel', endPinch );
 
 	document.addEventListener( 'keydown', function ( e ) {
 		if ( mode !== 'edit' ) { return; }
