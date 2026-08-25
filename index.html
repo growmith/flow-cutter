@@ -88,6 +88,47 @@
 	.hintTouch { display: none; }   /* bascule dans la media query mobile */
 	body.text-input-open #dropZone { display: none; }   /* la cellule de saisie prend toute l'attention */
 
+	/* Barre du calque texte : masquee par defaut, activee dans la media query mobile.
+	   translateX(-50%) : la position calculee en JS designe le CENTRE de la barre, ce qui
+	   permet de l'aligner simplement sur le milieu du calque. */
+	#textToolbar { display: none; }
+	body.text-input-open #textToolbar { display: none !important; }   /* ne pas chevaucher la cellule */
+
+	@media (max-width: 860px) {
+		#textToolbar:not([hidden]) {
+			display: flex;
+			position: absolute;
+			z-index: 22;
+			align-items: center;
+			gap: 6px;
+			padding: 6px;
+			border-radius: 11px;
+			background: rgba(29,32,39,0.97);
+			border: 1px solid var(--border);
+			box-shadow: 0 6px 22px rgba(0,0,0,0.55);
+			transform: translateX(-50%);
+		}
+		#toolbarFontSelect {
+			max-width: 170px;
+			margin: 0;
+			padding: 8px 9px;
+			font: inherit; font-size: 13px;
+			color: var(--text);
+			background: var(--panel-2);
+			border: 1px solid var(--border);
+			border-radius: 8px;
+		}
+		#btnToolbarEdit {
+			width: 38px; height: 36px;
+			margin: 0; padding: 0;
+			flex-shrink: 0;
+			font-size: 16px;
+			background: var(--accent-2);
+			border-color: var(--accent-2);
+			color: #fff;
+		}
+	}
+
 	/* Cellule de saisie posee au centre du gabarit. Volontairement dans .canvas-wrap et
 	   non dans le panneau : le texte se tape la ou il va apparaitre. */
 	#textOverlay {
@@ -343,6 +384,15 @@
 			</div>
 		</div>
 
+		<!-- Reglages du calque texte selectionne, poses au-dessus de lui. Mobile uniquement :
+		     sur grand ecran le panneau lateral est visible en permanence et fait deja le
+		     travail. Ici, aller les chercher dans la feuille obligerait a masquer le dessin
+		     qu'on est justement en train de regler. -->
+		<div id="textToolbar" hidden>
+			<select id="toolbarFontSelect" aria-label="Police du texte"></select>
+			<button type="button" id="btnToolbarEdit" title="Modifier le texte" aria-label="Modifier le texte">✎</button>
+		</div>
+
 		<!-- Saisie posee sur le dessin : evite d'ouvrir la feuille pour taper un mot. -->
 		<div id="textOverlay" hidden>
 			<input type="text" id="overlayTextInput" placeholder="Votre texte…" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="done">
@@ -434,7 +484,7 @@
 		<!-- Marqueur de version. Sert a repondre en une seconde a la question "est-ce que
 		     la mise a jour est bien arrivee sur l'iPad ?", sans avoir a deviner d'apres le
 		     comportement. A incrementer a chaque deploiement. -->
-		<p id="buildTag">version 2026.08.25-7</p>
+		<p id="buildTag">version 2026.08.25-8</p>
 	</aside>
 </main>
 
@@ -787,6 +837,34 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		// insert:false : sert juste a recuperer des segments de cercle, jamais ajoute au projet.
 		rotateHandle.segments = new paper.Path.Circle( { center: rPos, radius: hs, insert: false } ).segments;
 		rotateLine.segments = [ b.topCenter, rPos ];
+
+		updateTextToolbar();
+	}
+
+	// Barre du calque texte : posee au-dessus de la boite de selection, en coordonnees
+	// ecran, et maintenue a l'interieur du canvas. Un calque colle contre un bord ne doit
+	// pas emmener la barre hors de vue, et s'il n'y a pas la place au-dessus, elle passe
+	// en dessous plutot que de se faire rogner par l'en-tete.
+	function updateTextToolbar() {
+		var bar = els.textToolbar;
+		if ( !bar ) { return; }
+		var sel = selectedLayer();
+		if ( !COARSE_POINTER || mode !== 'edit' || !sel || sel.kind !== 'text' ) { bar.hidden = true; return; }
+
+		bar.hidden = false;
+		var b = sel.item.bounds;
+		var topPt = paper.view.projectToView( b.topCenter );
+		var bottomPt = paper.view.projectToView( b.bottomCenter );
+		var bw = bar.offsetWidth || 210, bh = bar.offsetHeight || 48;
+		var m = 8;
+
+		var x = Math.min( Math.max( topPt.x, bw / 2 + m ), Math.max( bw / 2 + m, canvas.clientWidth - bw / 2 - m ) );
+		var y = topPt.y - ROTATE_OFFSET_PX - 14 - bh;
+		if ( y < m ) { y = bottomPt.y + 16; }
+		y = Math.min( Math.max( y, m ), Math.max( m, canvas.clientHeight - bh - m ) );
+
+		bar.style.left = x + 'px';
+		bar.style.top = y + 'px';
 	}
 
 	/* ---------- Vue : centrage + zoom pour tout voir ---------- */
@@ -903,6 +981,9 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		btnAddText: document.getElementById( 'btnAddText' ),
 		fabText: document.getElementById( 'fabText' ),
 		textOverlay: document.getElementById( 'textOverlay' ),
+		textToolbar: document.getElementById( 'textToolbar' ),
+		toolbarFontSelect: document.getElementById( 'toolbarFontSelect' ),
+		btnToolbarEdit: document.getElementById( 'btnToolbarEdit' ),
 		overlayTextInput: document.getElementById( 'overlayTextInput' ),
 		layersList: document.getElementById( 'layersList' ),
 		layersEmpty: document.getElementById( 'layersEmpty' ),
@@ -958,7 +1039,9 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		if ( isText ) {
 			els.editTextContent.value = sel.textContent;
 			if ( els.editFontSelect ) { els.editFontSelect.value = String( sel.fontId ); }
+			if ( els.toolbarFontSelect ) { els.toolbarFontSelect.value = String( sel.fontId ); }
 		}
+		updateTextToolbar();
 	}
 
 	// Rejoue le filtre n&b d'un calque image apres un changement d'option, en repartant
@@ -1367,7 +1450,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	}
 
 	function renderFontOptions( preferId ) {
-		[ els.fontSelect, els.editFontSelect ].forEach( function ( sel ) {
+		[ els.fontSelect, els.editFontSelect, els.toolbarFontSelect ].forEach( function ( sel ) {
 			if ( !sel ) { return; }
 			var prevValue = preferId !== undefined ? String( preferId ) : sel.value;
 			sel.innerHTML = '';
@@ -1398,6 +1481,10 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// differents, toutes sous licence SIL Open Font (redistribution autorisee, cf
 	// fonts/LICENSES.md), reduites au jeu de caracteres latin/francais : 132 Ko au total
 	// au lieu de 1,5 Mo pour les fichiers d'origine.
+	// Passe a true des que l'utilisateur choisit explicitement une police : a partir de la,
+	// l'arrivee des polices restantes ne doit plus modifier sa selection.
+	var userPickedFont = false;
+
 	var BUNDLED_FONTS = [
 		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue \u2013 condensé, majuscules' },
 		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold \u2013 géométrique' },
@@ -1422,7 +1509,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 					fontLibrary.sort( function ( a, b ) {
 						return ( a.order === undefined ? 999 : a.order ) - ( b.order === undefined ? 999 : b.order );
 					} );
-					renderFontOptions();
+					// Tant que l'utilisateur n'a pas choisi lui-meme, on force la premiere police
+					// de la liste. Sans cela, la police par defaut etait celle dont le
+					// telechargement se terminait en premier, donc differente a chaque
+					// chargement de page selon la latence reseau.
+					renderFontOptions( userPickedFont ? undefined : fontLibrary[ 0 ].id );
 				} )
 				.catch( function ( e ) {
 					// Une police manquante ne doit pas empecher l'application de fonctionner :
@@ -1456,6 +1547,10 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		reader.onerror = function () { log( 'Impossible de lire le fichier de police.', true ); };
 		reader.readAsArrayBuffer( file );
 	}
+
+	[ els.fontSelect, els.editFontSelect, els.toolbarFontSelect ].forEach( function ( sel ) {
+		if ( sel ) { sel.addEventListener( 'change', function () { userPickedFont = true; } ); }
+	} );
 
 	els.fontFileInput.addEventListener( 'change', function ( e ) {
 		if ( e.target.files && e.target.files.length ) {
@@ -1607,6 +1702,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		layer.currentScalePct = naturalWidth > 0.0001 ? ( widthBefore / naturalWidth ) * 100 : 100;
 
 		renderLayersPanel();
+		// updateSelectionUI() et pas seulement updateHandles() : le calque vient peut-etre de
+		// changer de police, et les trois selecteurs (panneau, edition, barre flottante)
+		// doivent afficher la meme valeur. Changer la police depuis la barre laissait sinon
+		// le panneau sur l'ancienne.
+		updateSelectionUI();
 		updateHandles();
 		if ( layer.id === selectedLayerId ) { els.widthMM.value = layer.item.bounds.width.toFixed( 2 ); }
 	}
@@ -1649,29 +1749,36 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// imposait deux allers-retours (deplier pour taper, replier pour voir le resultat)
 	// pour un seul mot. Le seul cas ou la feuille s'ouvre est l'absence de police chargee,
 	// puisque le chargement s'y trouve et qu'aucun trace ne peut etre produit sans elle.
-	var textOverlayBusy = false; // garde-fou : evite qu'un blur declenche pendant la fermeture ne reboucle
+	var textOverlayBusy = false;      // garde-fou : evite qu'un blur declenche pendant la fermeture ne reboucle
+	var textOverlayTargetId = null;   // null = creation d'un calque ; sinon, id du calque a modifier
 
-	function openTextOverlay() {
+	// editLayer : passe uniquement lors d'une modification (double tape sur un texte
+	// existant, ou bouton crayon de la barre). La meme cellule sert alors a reecrire le
+	// calque plutot qu'a en creer un nouveau.
+	function openTextOverlay( editLayer ) {
 		if ( !els.textOverlay || !els.overlayTextInput ) { return; }
-		if ( !parseInt( els.fontSelect.value, 10 ) ) {
+		if ( !editLayer && !parseInt( els.fontSelect.value, 10 ) ) {
 			sheetSetOpen( true );
 			log( 'Charge d\'abord une police (.ttf ou .otf) : le texte est converti en traces vectoriels a partir du fichier de police.', true );
 			return;
 		}
 		sheetSetOpen( false );
 		document.body.classList.add( 'text-input-open' ); // masque l'encart d'accueil, qui se superposerait
-		els.overlayTextInput.value = '';
+		textOverlayTargetId = editLayer ? editLayer.id : null;
+		els.overlayTextInput.value = editLayer ? editLayer.textContent : '';
 		els.textOverlay.hidden = false;
 		// Focus SYNCHRONE dans le gestionnaire de clic : iOS ne leve le clavier que si la
 		// demande vient directement d'un geste utilisateur. Un focus differe (setTimeout,
 		// fin de transition) est ignore silencieusement.
 		els.overlayTextInput.focus();
+		if ( editLayer ) { els.overlayTextInput.select(); } // texte pre-selectionne : on peut remplacer d'un coup
 	}
 
 	function closeTextOverlay() {
 		if ( !els.textOverlay ) { return; }
 		textOverlayBusy = true;
 		document.body.classList.remove( 'text-input-open' );
+		textOverlayTargetId = null;
 		els.textOverlay.hidden = true;
 		els.overlayTextInput.blur();
 		textOverlayBusy = false;
@@ -1680,14 +1787,43 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	function commitTextOverlay() {
 		if ( !els.overlayTextInput || els.textOverlay.hidden ) { return; }
 		var content = els.overlayTextInput.value.trim();
+		var targetId = textOverlayTargetId;   // lu avant la fermeture, qui le remet a null
 		var fontId = parseInt( els.fontSelect.value, 10 );
 		closeTextOverlay();
-		if ( !content || !fontId ) { return; }
+		if ( !content ) { return; }
+
+		if ( targetId !== null ) {
+			for ( var i = 0; i < layers.length; i++ ) {
+				if ( layers[ i ].id === targetId ) { editTextLayer( layers[ i ], content, null ); return; }
+			}
+			return;
+		}
+		if ( !fontId ) { return; }
 		addTextLayer( content, fontId, true ); // true : on laisse la feuille fermee
 	}
 
+	// Enveloppe volontaire : branche directement, l'ecouteur passerait l'objet Event en
+	// premier argument, qui serait pris pour un calque a modifier.
 	if ( els.fabText ) {
-		els.fabText.addEventListener( 'click', openTextOverlay );
+		els.fabText.addEventListener( 'click', function () { openTextOverlay(); } );
+	}
+
+	// Bouton crayon de la barre flottante.
+	if ( els.btnToolbarEdit ) {
+		els.btnToolbarEdit.addEventListener( 'click', function () {
+			var sel = selectedLayer();
+			if ( sel && sel.kind === 'text' ) { openTextOverlay( sel ); }
+		} );
+	}
+
+	// Changement de police depuis la barre flottante : applique au calque selectionne.
+	if ( els.toolbarFontSelect ) {
+		els.toolbarFontSelect.addEventListener( 'change', function () {
+			var sel = selectedLayer();
+			if ( !sel || sel.kind !== 'text' ) { return; }
+			var fontId = parseInt( els.toolbarFontSelect.value, 10 );
+			if ( fontId ) { editTextLayer( sel, null, fontId ); }
+		} );
 	}
 	if ( els.overlayTextInput ) {
 		els.overlayTextInput.addEventListener( 'keydown', function ( e ) {
@@ -1966,6 +2102,73 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	}
 	canvas.addEventListener( 'touchend', function ( e ) { if ( e.touches.length < 2 ) { endPinch(); } } );
 	canvas.addEventListener( 'touchcancel', endPinch );
+
+	/* ---------- Double tape / double clic sur un texte : modification directe ---------- */
+
+	// Le navigateur ne produit pas d'evenement dblclick au doigt : on reconstitue la double
+	// tape a la main. Deux appuis rapproches dans le temps ET dans l'espace, sur un calque
+	// texte, rouvrent la cellule de saisie pre-remplie. Sans cela, corriger une faute
+	// obligeait a deplier la feuille, donc a masquer le texte qu'on veut relire.
+	var DOUBLE_TAP_MS = 320;
+	var DOUBLE_TAP_PX = 32;
+	var lastTapAt = 0, lastTapX = 0, lastTapY = 0;
+	var tapStartX = 0, tapStartY = 0, tapMoved = false;
+
+	function canvasPoint( clientX, clientY ) {
+		var r = canvas.getBoundingClientRect();
+		return { x: clientX - r.left, y: clientY - r.top };
+	}
+
+	// Cherche un calque texte sous un point exprime en coordonnees ecran du canvas.
+	function textLayerAt( viewX, viewY ) {
+		var p = paper.view.viewToProject( new paper.Point( viewX, viewY ) );
+		for ( var i = layers.length - 1; i >= 0; i-- ) {
+			if ( layers[ i ].kind === 'text' && layers[ i ].item.bounds.contains( p ) ) { return layers[ i ]; }
+		}
+		return null;
+	}
+
+	function tryOpenTextEdit( viewX, viewY ) {
+		var layer = textLayerAt( viewX, viewY );
+		if ( !layer ) { return false; }
+		selectLayer( layer.id );
+		openTextOverlay( layer );
+		return true;
+	}
+
+	canvas.addEventListener( 'touchstart', function ( e ) {
+		if ( e.touches.length !== 1 ) { return; }
+		tapStartX = e.touches[ 0 ].clientX;
+		tapStartY = e.touches[ 0 ].clientY;
+		tapMoved = false;
+	}, { passive: true } );
+
+	canvas.addEventListener( 'touchmove', function ( e ) {
+		if ( e.touches.length !== 1 || tapMoved ) { return; }
+		var dx = e.touches[ 0 ].clientX - tapStartX, dy = e.touches[ 0 ].clientY - tapStartY;
+		// Au-dela de ce seuil, le geste est un deplacement : ce n'est plus une tape.
+		if ( Math.sqrt( dx * dx + dy * dy ) > 12 ) { tapMoved = true; }
+	}, { passive: true } );
+
+	canvas.addEventListener( 'touchend', function ( e ) {
+		if ( pinching || tapMoved || e.touches.length !== 0 || !e.changedTouches || e.changedTouches.length !== 1 ) { return; }
+		var t = e.changedTouches[ 0 ];
+		var now = Date.now();
+		var dx = t.clientX - lastTapX, dy = t.clientY - lastTapY;
+		var isDouble = ( now - lastTapAt ) < DOUBLE_TAP_MS && Math.sqrt( dx * dx + dy * dy ) < DOUBLE_TAP_PX;
+		lastTapAt = now; lastTapX = t.clientX; lastTapY = t.clientY;
+		if ( !isDouble ) { return; }
+		lastTapAt = 0; // une troisieme tape ne doit pas rouvrir la cellule aussitot fermee
+		var p = canvasPoint( t.clientX, t.clientY );
+		tryOpenTextEdit( p.x, p.y );
+	} );
+
+	// Equivalent souris, pour ne pas creer deux comportements differents selon l'appareil.
+	canvas.addEventListener( 'dblclick', function ( e ) {
+		if ( mode !== 'edit' ) { return; }
+		var p = canvasPoint( e.clientX, e.clientY );
+		if ( tryOpenTextEdit( p.x, p.y ) ) { e.preventDefault(); }
+	} );
 
 	document.addEventListener( 'keydown', function ( e ) {
 		if ( mode !== 'edit' ) { return; }
