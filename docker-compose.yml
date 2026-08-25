@@ -1,0 +1,24 @@
+services:
+  flow-cutter:
+    build: .
+    container_name: flow-cutter
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    # Par defaut : le port 80 du conteneur est publie sur le port 8080 de la machine hote.
+    # Pointez votre reverse proxy vers http://<ip-du-serveur>:8080 (ou changez "8080" ici
+    # pour un autre port libre). C'est le plus simple, et ca marche quel que soit votre
+    # reverse proxy (Traefik, nginx, Caddy, nginx-proxy, etc.), y compris quand ce stack
+    # est deploye depuis Portainer sans reseau Docker partage prealable.
+    #
+    # Alternative : si votre reverse proxy tourne lui-meme dans Docker et que vous
+    # preferez le relier directement via le reseau Docker interne (sans exposer de port
+    # sur l'hote), commentez "ports:" ci-dessus et decommentez les lignes "networks:"
+    # ci-dessous - en remplacant "reverse-proxy" par le nom du reseau Docker externe que
+    # votre proxy utilise deja.
+    # networks:
+    #   - reverse-proxy
+
+# networks:
+#   reverse-proxy:
+#     external: true
