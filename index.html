@@ -102,7 +102,7 @@
 
 	.fontPickerTrigger {
 		width: 100%; margin: 0; text-align: left;
-		padding: 8px 28px 8px 10px;
+		padding: 9px 28px 9px 10px;
 		background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
 		color: var(--text);
 		white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -113,9 +113,7 @@
 		border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim);
 		transform: rotate(45deg);
 	}
-	.fontPickerName { font-size: 17px; line-height: 1.25; display: block; }
-	.fontPickerHint { font-size: 11px; color: var(--text-dim); display: block; margin-top: 1px;
-		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+	.fontPickerName { font-size: 18px; line-height: 1.2; display: block; }
 
 	.fontPickerList {
 		position: absolute; left: 0; right: 0; top: calc(100% + 5px);
@@ -128,7 +126,7 @@
 	.fontPickerList[hidden] { display: none; }
 	.fontPickerItem {
 		width: 100%; margin: 0 0 2px; text-align: left;
-		padding: 9px 10px;
+		padding: 8px 10px;
 		background: transparent; border: none; border-radius: 6px; color: var(--text);
 		white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 	}
@@ -407,7 +405,7 @@
 	     en une seconde a "est-ce que la mise a jour est bien arrivee sur l'appareil ?",
 	     ce qu'il ne peut pas faire s'il faut d'abord deplier une feuille et la faire
 	     defiler jusqu'en bas pour le trouver. A incrementer a chaque deploiement. -->
-	<span id="buildTag">2026.08.26-10</span>
+	<span id="buildTag">2026.08.26-11</span>
 </header>
 
 <main>
@@ -1541,13 +1539,6 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		var family = option && option.getAttribute( 'data-family' );
 		if ( family ) { name.style.fontFamily = '"' + family + '", sans-serif'; }
 		el.appendChild( name );
-		var hint = option && option.getAttribute( 'data-hint' );
-		if ( hint ) {
-			var h = document.createElement( 'span' );
-			h.className = 'fontPickerHint';
-			h.textContent = hint;
-			el.appendChild( h );
-		}
 	}
 
 	function refreshFontPicker( p ) {
@@ -1598,10 +1589,9 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			fontLibrary.forEach( function ( f ) {
 				var o = document.createElement( 'option' );
 				o.value = String( f.id );
-				o.textContent = f.hint ? ( f.name + ' \u2013 ' + f.hint ) : f.name;
+				o.textContent = f.name;
 				// Donnees reprises par le selecteur avec apercu (cf refreshFontPicker).
 				o.setAttribute( 'data-name', f.name );
-				o.setAttribute( 'data-hint', f.hint || '' );
 				if ( f.cssFamily ) {
 					o.setAttribute( 'data-family', f.cssFamily );
 					o.style.fontFamily = '"' + f.cssFamily + '", sans-serif'; // utile la ou le natif l'honore
@@ -1625,15 +1615,15 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// l'arrivee des polices restantes ne doit plus modifier sa selection.
 	var userPickedFont = false;
 
-	// name : ecrit dans la police elle-meme dans le selecteur.
-	// hint : reste en police d'interface, sinon la description devient illisible avec une
-	//        police tres typee (Bebas est en capitales, par exemple).
+	// Le nom seul, ecrit dans la police elle-meme. Pas de description : l'apercu montre deja
+	// ce qu'une mention comme "condense" ou "arrondi" tentait de dire, et la ligne
+	// supplementaire doublait la hauteur de chaque entree pour rien.
 	var BUNDLED_FONTS = [
-		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue', hint: 'condensé, capitales' },
-		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold', hint: 'géométrique' },
-		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black', hint: 'très gras' },
-		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black', hint: 'neutre' },
-		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold', hint: 'arrondi' }
+		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue' },
+		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold' },
+		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black' },
+		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black' },
+		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold' }
 	];
 
 	// Enregistre la police aupres du moteur de rendu, pour pouvoir ensuite l'utiliser en
@@ -1662,7 +1652,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 					var cssFamily = 'FlowFont' + index;
 					registerCssFont( cssFamily, buf ); // avant l'analyse : le tampon reste intact
 					fontLibrary.push( {
-						id: nextFontId++, name: def.name, hint: def.hint,
+						id: nextFontId++, name: def.name,
 						cssFamily: cssFamily, otFont: opentype.parse( buf ), order: index
 					} );
 					// Les reponses n'arrivent pas dans l'ordre des requetes : on retrie pour que
