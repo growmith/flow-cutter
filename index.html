@@ -199,9 +199,12 @@
 	}
 	#textOverlay[hidden] { display: none; }
 	#overlayTextInput {
+		display: block;
 		width: 100%;
+		max-height: 40vh;
 		padding: 12px 14px;
 		font: inherit; font-size: 16px;   /* 16px : en dessous, Safari iOS zoome a la mise au point */
+		line-height: 1.35;
 		text-align: center;
 		color: var(--text);
 		background: rgba(29,32,39,0.96);
@@ -209,13 +212,17 @@
 		border-radius: 10px;
 		box-shadow: 0 10px 30px rgba(0,0,0,0.55);
 		outline: none;
+		resize: none;          /* la hauteur suit le contenu, cf autoGrowTextarea */
+		overflow-y: auto;
 	}
-	#textOverlayHint {
-		margin: 7px 0 0;
-		text-align: center;
-		font-size: 11.5px;
-		color: var(--text-dim);
-		text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+	#textOverlayActions {
+		display: flex; gap: 8px; margin-top: 8px;
+	}
+	#textOverlayActions button {
+		flex: 1;
+		margin: 0;
+		padding: 10px 12px;
+		box-shadow: 0 6px 18px rgba(0,0,0,0.45);
 	}
 	#dropZone.over #emptyHint { border-color: var(--accent); color: var(--text); }
 
@@ -265,9 +272,11 @@
 
 	.section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
 
-	.field input[type=text] {
+	.field input[type=text],
+	.field textarea {
 		width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border);
 		background: var(--panel-2); color: var(--text); font-size: 14px;
+		font-family: inherit; line-height: 1.4; resize: vertical;
 	}
 	.field select {
 		width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border);
@@ -406,6 +415,7 @@
 		button, label.filebtn { padding: 12px; font-size: 14px; margin-bottom: 10px; }
 		.field input[type=number],
 		.field input[type=text],
+		.field textarea,
 		.field select { padding: 11px 10px; font-size: 16px; }
 		.layerRow { padding: 11px 9px; font-size: 13px; }
 		.iconBtn { width: 32px; height: 32px; font-size: 12px; }
@@ -428,7 +438,7 @@
 	     en une seconde a "est-ce que la mise a jour est bien arrivee sur l'appareil ?",
 	     ce qu'il ne peut pas faire s'il faut d'abord deplier une feuille et la faire
 	     defiler jusqu'en bas pour le trouver. A incrementer a chaque deploiement. -->
-	<span id="buildTag">2026.08.26-14</span>
+	<span id="buildTag">2026.08.26-15</span>
 </header>
 
 <main>
@@ -460,8 +470,14 @@
 
 		<!-- Saisie posee sur le dessin : evite d'ouvrir la feuille pour taper un mot. -->
 		<div id="textOverlay" hidden>
-			<input type="text" id="overlayTextInput" placeholder="Votre texte…" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="done">
-			<p id="textOverlayHint">Entrée pour valider</p>
+			<!-- textarea et non input : la touche entree doit inserer un retour a la ligne.
+			     La validation passe donc par un bouton explicite. Pas d'attribut
+			     enterkeyhint : on veut que le clavier iOS affiche bien une touche retour. -->
+			<textarea id="overlayTextInput" rows="1" placeholder="Votre texte…" autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea>
+			<div id="textOverlayActions">
+				<button type="button" id="btnOverlayCancel">Annuler</button>
+				<button type="button" id="btnOverlayOk" class="secondary">Valider</button>
+			</div>
 		</div>
 	</div>
 
@@ -483,7 +499,7 @@
 
 		<div class="field">
 			<label>Texte</label>
-			<input type="text" id="textContent" placeholder="Votre texte...">
+			<textarea id="textContent" rows="2" placeholder="Votre texte..."></textarea>
 		</div>
 		<button id="btnAddText" class="secondary">Ajouter le texte (blanc)</button>
 
@@ -498,7 +514,7 @@
 				<div id="textEditFields" style="display:none">
 					<div class="field">
 						<label>Contenu du texte</label>
-						<input type="text" id="editTextContent">
+						<textarea id="editTextContent" rows="2"></textarea>
 					</div>
 					<div class="field">
 						<label>Police</label>
@@ -1053,6 +1069,8 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		btnAddText: document.getElementById( 'btnAddText' ),
 		fabText: document.getElementById( 'fabText' ),
 		textOverlay: document.getElementById( 'textOverlay' ),
+		btnOverlayOk: document.getElementById( 'btnOverlayOk' ),
+		btnOverlayCancel: document.getElementById( 'btnOverlayCancel' ),
 		textToolbar: document.getElementById( 'textToolbar' ),
 		toolbarFontSelect: document.getElementById( 'toolbarFontSelect' ),
 		btnToolbarEdit: document.getElementById( 'btnToolbarEdit' ),
@@ -2044,39 +2062,69 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// crochetage - un choix simple et previsible, tout a fait adapte a un texte grave au laser.
 	// Repere police = Y vers le haut ; repere canevas (paper.js ici) = Y vers le bas : on
 	// retourne verticalement apres coup pour corriger.
+	var TEXT_LINE_HEIGHT = 1.18; // interligne, en multiples de la taille de police
+
+	// Etiquette courte d'un calque texte pour la liste : un retour a la ligne y serait
+	// invisible et collerait les mots, on le remplace par un separateur lisible.
+	function textLabel( content ) {
+		var plat = String( content ).replace( /\s*\n\s*/g, ' / ' );
+		return plat.length > 22 ? plat.slice( 0, 22 ) + '\u2026' : plat;
+	}
+
 	function buildTextOutline( content, otFont, sizeMM ) {
 		var compound = new paper.CompoundPath( { insert: false, fillColor: '#ffffff' } );
 		var unitsPerEm = otFont.unitsPerEm || 1000;
 		var fontScale = sizeMM / unitsPerEm;
-		var x = 0;
+
+		var lignes = String( content ).split( /\r\n|\r|\n/ );
+
+		// Largeur de chaque ligne calculee AVANT de tracer : les lignes sont centrees les
+		// unes par rapport aux autres, ce qui suppose de connaitre la plus large d'abord.
+		// Une ligne vide compte pour zero mais decale quand meme les suivantes.
+		function largeurLigne( texte ) {
+			var w = 0;
+			Array.from( texte ).forEach( function ( ch ) {
+				var g = null;
+				try { g = otFont.charToGlyph( ch ); } catch ( e ) { g = null; }
+				if ( g ) { w += ( g.advanceWidth || 0 ) * fontScale; }
+			} );
+			return w;
+		}
+		var largeurs = lignes.map( largeurLigne );
+		var largeurMax = largeurs.reduce( function ( a, b ) { return b > a ? b : a; }, 0 );
+
 		var current = null;
-		var chars = Array.from( content ); // Array.from : correct meme avec des paires UTF-16 (emoji, etc.)
+		lignes.forEach( function ( ligne, indexLigne ) {
+			var x = ( largeurMax - largeurs[ indexLigne ] ) / 2;  // centrage de la ligne
+			var y = indexLigne * sizeMM * TEXT_LINE_HEIGHT;       // axe Y vers le bas : ligne suivante plus basse
 
-		chars.forEach( function ( ch ) {
-			var glyph = null;
-			try { glyph = otFont.charToGlyph( ch ); } catch ( e ) { glyph = null; }
-			if ( !glyph ) { return; }
+			// Array.from : correct meme avec des paires UTF-16 (emoji, etc.)
+			Array.from( ligne ).forEach( function ( ch ) {
+				var glyph = null;
+				try { glyph = otFont.charToGlyph( ch ); } catch ( e ) { glyph = null; }
+				if ( !glyph ) { return; }
 
-			var glyphPath = null;
-			try { glyphPath = glyph.getPath( x, 0, sizeMM ); } catch ( e ) { glyphPath = null; }
-			if ( glyphPath && glyphPath.commands ) {
-				glyphPath.commands.forEach( function ( cmd ) {
-					if ( cmd.type === 'M' ) {
-						current = new paper.Path( { insert: false } );
-						current.moveTo( new paper.Point( cmd.x, cmd.y ) );
-						compound.addChild( current );
-					} else if ( cmd.type === 'L' ) {
-						current.lineTo( new paper.Point( cmd.x, cmd.y ) );
-					} else if ( cmd.type === 'C' ) {
-						current.cubicCurveTo( new paper.Point( cmd.x1, cmd.y1 ), new paper.Point( cmd.x2, cmd.y2 ), new paper.Point( cmd.x, cmd.y ) );
-					} else if ( cmd.type === 'Q' ) {
-						current.quadraticCurveTo( new paper.Point( cmd.x1, cmd.y1 ), new paper.Point( cmd.x, cmd.y ) );
-					} else if ( cmd.type === 'Z' ) {
-						if ( current ) { current.closePath(); }
-					}
-				} );
-			}
-			x += ( glyph.advanceWidth || 0 ) * fontScale;
+				var glyphPath = null;
+				try { glyphPath = glyph.getPath( x, y, sizeMM ); } catch ( e ) { glyphPath = null; }
+				if ( glyphPath && glyphPath.commands ) {
+					glyphPath.commands.forEach( function ( cmd ) {
+						if ( cmd.type === 'M' ) {
+							current = new paper.Path( { insert: false } );
+							current.moveTo( new paper.Point( cmd.x, cmd.y ) );
+							compound.addChild( current );
+						} else if ( cmd.type === 'L' ) {
+							current.lineTo( new paper.Point( cmd.x, cmd.y ) );
+						} else if ( cmd.type === 'C' ) {
+							current.cubicCurveTo( new paper.Point( cmd.x1, cmd.y1 ), new paper.Point( cmd.x2, cmd.y2 ), new paper.Point( cmd.x, cmd.y ) );
+						} else if ( cmd.type === 'Q' ) {
+							current.quadraticCurveTo( new paper.Point( cmd.x1, cmd.y1 ), new paper.Point( cmd.x, cmd.y ) );
+						} else if ( cmd.type === 'Z' ) {
+							if ( current ) { current.closePath(); }
+						}
+					} );
+				}
+				x += ( glyph.advanceWidth || 0 ) * fontScale;
+			} );
 		} );
 
 		// Pas de retournement vertical ici. glyph.getPath() d'opentype.js renvoie deja des
@@ -2108,7 +2156,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		designLayer.addChild( wrap );
 		wrap.position = new paper.Point( W / 2, H / 2 );
 
-		var displayName = content.length > 22 ? content.slice( 0, 22 ) + '…' : content;
+		// Un texte de plusieurs lignes peut depasser le gabarit en hauteur : meme traitement
+		// que pour un fichier importe trop grand.
+		fitIntoGuard( wrap );
+
+		var displayName = textLabel( content );
 		var layer = {
 			id: nextLayerId++,
 			kind: 'text',
@@ -2172,7 +2224,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 
 		layer.textContent = content;
 		layer.fontId = fontEntry.id;
-		layer.name = content.length > 22 ? content.slice( 0, 22 ) + '…' : content;
+		layer.name = textLabel( content );
 		layer.baseWidthMM = Math.max( naturalWidth, 0.01 );
 		layer.currentScalePct = naturalWidth > 0.0001 ? ( widthBefore / naturalWidth ) * 100 : 100;
 
@@ -2242,6 +2294,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		textOverlayTargetId = editLayer ? editLayer.id : null;
 		els.overlayTextInput.value = editLayer ? editLayer.textContent : '';
 		els.textOverlay.hidden = false;
+		autoGrowTextarea( els.overlayTextInput ); // le texte repris peut deja faire plusieurs lignes
 		// Focus SYNCHRONE dans le gestionnaire de clic : iOS ne leve le clavier que si la
 		// demande vient directement d'un geste utilisateur. Un focus differe (setTimeout,
 		// fin de transition) est ignore silencieusement.
@@ -2300,26 +2353,45 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			if ( fontId ) { editTextLayer( sel, null, fontId ); }
 		} );
 	}
+	// La touche entree insere un retour a la ligne : c'est le comportement naturel d'une
+	// zone de texte, et la seule facon de composer plusieurs lignes au clavier mobile.
+	// La validation passe donc par le bouton "Valider", plus Echap pour annuler au clavier.
+	var annulationEnCours = false;
 	if ( els.overlayTextInput ) {
 		els.overlayTextInput.addEventListener( 'keydown', function ( e ) {
-			if ( e.key === 'Enter' ) { e.preventDefault(); commitTextOverlay(); }
-			else if ( e.key === 'Escape' ) { e.preventDefault(); closeTextOverlay(); }
+			if ( e.key === 'Escape' ) { e.preventDefault(); closeTextOverlay(); }
 		} );
-		// Le bouton "OK"/"Terminer" du clavier iOS ne produit pas toujours un Enter : il
-		// se contente de rendre le focus. On valide donc aussi a la perte de focus, ce qui
-		// couvre au passage l'utilisateur qui touche le dessin pour sortir de la saisie.
+		// La hauteur suit le contenu, sans jamais depasser la limite CSS.
+		els.overlayTextInput.addEventListener( 'input', function () { autoGrowTextarea( els.overlayTextInput ); } );
+		// Perdre le focus vaut validation : c'est ce qui se passe quand on touche le dessin
+		// pour sortir de la saisie. Sauf si le doigt est justement parti sur "Annuler" :
+		// le blur precede alors le clic du bouton, et sans ce drapeau le texte serait valide
+		// juste avant d'etre annule.
 		els.overlayTextInput.addEventListener( 'blur', function () {
-			if ( !textOverlayBusy ) { commitTextOverlay(); }
+			if ( textOverlayBusy || annulationEnCours ) { return; }
+			setTimeout( function () { if ( !annulationEnCours ) { commitTextOverlay(); } }, 0 );
 		} );
+	}
+	if ( els.btnOverlayCancel ) {
+		els.btnOverlayCancel.addEventListener( 'pointerdown', function () { annulationEnCours = true; } );
+		els.btnOverlayCancel.addEventListener( 'click', function () {
+			closeTextOverlay();
+			annulationEnCours = false;
+		} );
+	}
+	if ( els.btnOverlayOk ) {
+		els.btnOverlayOk.addEventListener( 'click', function () { commitTextOverlay(); } );
 	}
 
-	// Entree vaut validation. Sur telephone le clavier recouvre le bouton d'ajout : sans ca
-	// il faudrait le refermer a la main avant de pouvoir valider.
-	if ( els.textContent ) {
-		els.textContent.addEventListener( 'keydown', function ( e ) {
-			if ( e.key === 'Enter' ) { e.preventDefault(); els.btnAddText.click(); }
-		} );
+	// Ajuste la hauteur d'une zone de texte a son contenu.
+	function autoGrowTextarea( el ) {
+		if ( !el ) { return; }
+		el.style.height = 'auto';
+		el.style.height = el.scrollHeight + 'px';
 	}
+
+	// Le champ du panneau est lui aussi multiligne : la touche entree y insere un retour a
+	// la ligne, et le bouton "Ajouter le texte" juste en dessous sert a valider.
 
 	// Edition en place d'un calque texte deja cree : cliquer sur ce calque (liste ou dessin)
 	// le selectionne, ce qui affiche et pre-remplit ces deux champs (cf updateSelectionUI).
