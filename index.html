@@ -405,7 +405,7 @@
 	     en une seconde a "est-ce que la mise a jour est bien arrivee sur l'appareil ?",
 	     ce qu'il ne peut pas faire s'il faut d'abord deplier une feuille et la faire
 	     defiler jusqu'en bas pour le trouver. A incrementer a chaque deploiement. -->
-	<span id="buildTag">2026.08.26-11</span>
+	<span id="buildTag">2026.08.26-12</span>
 </header>
 
 <main>
@@ -2065,16 +2065,27 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// pour toutes en millimetres, il deviendrait enorme a fort zoom et rendrait impossible
 	// tout placement fin, tout en devenant inatteignable a faible zoom. Rapporte au zoom
 	// courant, l'accroche se declenche toujours a la meme distance percue.
-	function snapToCenter( layer ) {
+	// Position reelle du calque pendant un deplacement, c'est-a-dire non aimantee. Les
+	// deplacements s'accumulent DESSUS, et l'aimantation n'agit qu'a l'affichage.
+	//
+	// Le calcul doit imperativement partir de cette position reelle et jamais de la position
+	// affichee. Sinon, chaque petit deplacement etant aussitot ramene sur l'axe, la position
+	// affichee redevient le point de depart du deplacement suivant : le calque ne peut plus
+	// se detacher qu'avec un geste depassant le seuil d'un seul coup, ce qui donne une
+	// aimantation collante au glisser lent et un decrochage brutal au geste rapide.
+	//
+	// Avec la position reelle, le comportement est celui attendu : le calque reste colle
+	// tant que le doigt est dans la zone, et se libere exactement quand il en sort, quelle
+	// que soit la vitesse du geste.
+	var dragTruePos = null;
+
+	// Convertit une position reelle en position a afficher.
+	function snapPoint( truePos ) {
 		var tol = CENTER_SNAP_PX / paper.view.zoom;
-		var p = layer.item.position;
-		var x = p.x, y = p.y;
-		var onX = Math.abs( x - W / 2 ) <= tol;
-		var onY = Math.abs( y - H / 2 ) <= tol;
-		if ( onX ) { x = W / 2; }
-		if ( onY ) { y = H / 2; }
-		if ( onX || onY ) { layer.item.position = new paper.Point( x, y ); }
+		var onX = Math.abs( truePos.x - W / 2 ) <= tol;
+		var onY = Math.abs( truePos.y - H / 2 ) <= tol;
 		showCenterGuides( onX, onY );
+		return new paper.Point( onX ? W / 2 : truePos.x, onY ? H / 2 : truePos.y );
 	}
 
 	function showCenterGuides( onX, onY ) {
@@ -2161,6 +2172,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			dragStartRotation = hit.currentRotation;
 		} else {
 			dragMode = 'move';
+			dragTruePos = hit.item.position.clone(); // point de depart reel du deplacement
 		}
 	};
 	tool.onMouseDrag = function ( event ) {
@@ -2179,12 +2191,18 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 				applyWidth( sel, targetWidth, resizeAnchor );
 			}
 		} else {
-			sel.item.position = sel.item.position.add( event.delta );
-			snapToCenter( sel );
+			if ( !dragTruePos ) { dragTruePos = sel.item.position.clone(); }
+			dragTruePos = dragTruePos.add( event.delta );
+			sel.item.position = snapPoint( dragTruePos );
 			updateHandles();
 		}
 	};
-	tool.onMouseUp = function () { dragMode = null; setSnapFeedback( false ); showCenterGuides( false, false ); };
+	tool.onMouseUp = function () {
+		dragMode = null;
+		dragTruePos = null;
+		setSnapFeedback( false );
+		showCenterGuides( false, false );
+	};
 
 	// Curseur adapte quand la souris survole une poignee (retour visuel avant le clic).
 	canvas.addEventListener( 'mousemove', function ( e ) {
@@ -2376,7 +2394,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		else if ( e.key === 'ArrowUp' ) { sel.item.position = sel.item.position.add( [ 0, -step ] ); }
 		else if ( e.key === 'ArrowDown' ) { sel.item.position = sel.item.position.add( [ 0, step ] ); }
 		else { moved = false; }
-		if ( moved ) { e.preventDefault(); snapToCenter( sel ); updateHandles(); }
+		// Pas d'aimantation aux fleches : elles servent justement au reglage fin, au
+		// dixieme de millimetre. Une zone d'accroche de plusieurs millimetres y rendrait
+		// tout deplacement impossible des qu'on approche d'un axe. Le bouton "Centrer"
+		// reste la pour un centrage exact.
+		if ( moved ) { e.preventDefault(); updateHandles(); }
 	} );
 
 	function applyRotation( layer, deg ) {
