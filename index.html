@@ -239,7 +239,8 @@
 	.status.err { background: rgba(255,92,92,0.1); color: var(--err); border: 1px solid rgba(255,92,92,0.3); }
 	.status:empty { display: none; }
 
-	#buildTag { margin: 16px 0 0; font-size: 11px; color: var(--text-dim); opacity: .65; text-align: center; }
+	#buildTag { margin-left: auto; flex-shrink: 0; font-size: 11px; color: var(--text-dim); opacity: .7;
+		font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 
 	.section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 10px; }
 
@@ -402,6 +403,11 @@
 <header>
 	<h1>FLOW · Découpe SVG</h1>
 	<span class="tag">Compose plusieurs designs (SVG, PNG, JPEG, texte) en calques, positionne-les puis rogne le tout à la forme du protège-bras (gabarit vertical).</span>
+	<!-- Marqueur de version, dans l'en-tete et non en bas du panneau : il sert a repondre
+	     en une seconde a "est-ce que la mise a jour est bien arrivee sur l'appareil ?",
+	     ce qu'il ne peut pas faire s'il faut d'abord deplier une feuille et la faire
+	     defiler jusqu'en bas pour le trouver. A incrementer a chaque deploiement. -->
+	<span id="buildTag">2026.08.26-10</span>
 </header>
 
 <main>
@@ -518,11 +524,6 @@
 		</div>
 
 		<div id="status" class="status"></div>
-
-		<!-- Marqueur de version. Sert a repondre en une seconde a la question "est-ce que
-		     la mise a jour est bien arrivee sur l'iPad ?", sans avoir a deviner d'apres le
-		     comportement. A incrementer a chaque deploiement. -->
-		<p id="buildTag">version 2026.08.25-9</p>
 	</aside>
 </main>
 
