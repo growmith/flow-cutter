@@ -91,6 +91,50 @@
 	/* Barre du calque texte : masquee par defaut, activee dans la media query mobile.
 	   translateX(-50%) : la position calculee en JS designe le CENTRE de la barre, ce qui
 	   permet de l'aligner simplement sur le milieu du calque. */
+	/* ---------- Selecteur de polices avec apercu ----------
+	   Une liste deroulante native ne pouvait pas convenir : Safari sur iOS dessine les
+	   <option> avec la police du systeme et ignore toute regle font-family posee dessus.
+	   On garde donc le <select> natif, masque, comme source de verite (tout le reste du
+	   code continue de lire et d'ecrire sa valeur), et on superpose cette liste, ou chaque
+	   nom est ecrit dans sa propre typographie. */
+	.fontPicker { position: relative; }
+	select.pickerHidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+	.fontPickerTrigger {
+		width: 100%; margin: 0; text-align: left;
+		padding: 8px 28px 8px 10px;
+		background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+		color: var(--text);
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	}
+	.fontPickerTrigger::after {
+		content: ''; position: absolute; right: 11px; top: 50%;
+		width: 7px; height: 7px; margin-top: -5px;
+		border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim);
+		transform: rotate(45deg);
+	}
+	.fontPickerName { font-size: 17px; line-height: 1.25; display: block; }
+	.fontPickerHint { font-size: 11px; color: var(--text-dim); display: block; margin-top: 1px;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+	.fontPickerList {
+		position: absolute; left: 0; right: 0; top: calc(100% + 5px);
+		z-index: 60;
+		max-height: 292px; overflow-y: auto; overscroll-behavior: contain;
+		padding: 4px;
+		background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
+		box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+	}
+	.fontPickerList[hidden] { display: none; }
+	.fontPickerItem {
+		width: 100%; margin: 0 0 2px; text-align: left;
+		padding: 9px 10px;
+		background: transparent; border: none; border-radius: 6px; color: var(--text);
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+	}
+	.fontPickerItem.current { background: rgba(43,127,255,0.16); }
+	.fontPickerItem:hover { background: rgba(43,127,255,0.22); }
+
 	#textToolbar { display: none; }
 	body.text-input-open #textToolbar { display: none !important; }   /* ne pas chevaucher la cellule */
 
@@ -108,16 +152,10 @@
 			box-shadow: 0 6px 22px rgba(0,0,0,0.55);
 			transform: translateX(-50%);
 		}
-		#toolbarFontSelect {
-			max-width: 170px;
-			margin: 0;
-			padding: 8px 9px;
-			font: inherit; font-size: 13px;
-			color: var(--text);
-			background: var(--panel-2);
-			border: 1px solid var(--border);
-			border-radius: 8px;
-		}
+		#textToolbar .fontPicker { width: 176px; }
+		#textToolbar .fontPickerTrigger { padding: 6px 26px 6px 9px; border-radius: 8px; }
+		#textToolbar .fontPickerName { font-size: 15px; }
+		#textToolbar .fontPickerList { width: 240px; right: auto; }
 		#btnToolbarEdit {
 			width: 38px; height: 36px;
 			margin: 0; padding: 0;
@@ -484,7 +522,7 @@
 		<!-- Marqueur de version. Sert a repondre en une seconde a la question "est-ce que
 		     la mise a jour est bien arrivee sur l'iPad ?", sans avoir a deviner d'apres le
 		     comportement. A incrementer a chaque deploiement. -->
-		<p id="buildTag">version 2026.08.25-8</p>
+		<p id="buildTag">version 2026.08.25-9</p>
 	</aside>
 </main>
 
@@ -809,7 +847,19 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	rotateHandle.strokeColor = '#2b7fff';
 	rotateHandle.strokeWidth = 1.5;
 
-	var uiGroup = new paper.Group( [ selBox, rotateLine, resizeHandle, rotateHandle ] );
+	// Traits d'aimantation : apparaissent quand le calque s'aligne sur un axe central du
+	// gabarit. Sans ce retour visuel, l'aimantation donne l'impression que le calque
+	// "accroche" sans raison apparente.
+	var guideV = new paper.Path( { insert: false } );
+	guideV.strokeColor = '#ff008c';
+	guideV.dashArray = [ 5, 4 ];
+	guideV.visible = false;
+	var guideH = new paper.Path( { insert: false } );
+	guideH.strokeColor = '#ff008c';
+	guideH.dashArray = [ 5, 4 ];
+	guideH.visible = false;
+
+	var uiGroup = new paper.Group( [ guideV, guideH, selBox, rotateLine, resizeHandle, rotateHandle ] );
 	uiGroup.visible = false;
 
 	function squarePoints( center, half ) {
@@ -823,7 +873,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// Appelee apres chaque deplacement / rotation / redimensionnement / selection.
 	function updateHandles() {
 		var sel = selectedLayer();
-		if ( mode !== 'edit' || !sel ) { uiGroup.visible = false; return; }
+		if ( mode !== 'edit' || !sel ) { uiGroup.visible = false; showCenterGuides( false, false ); return; }
 		uiGroup.visible = true;
 		var b = sel.item.bounds;
 		var pxToProj = 1 / paper.view.zoom;
@@ -1444,6 +1494,87 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	var fontLibrary = []; // { id, name, otFont (objet opentype.Font parse) }
 	var nextFontId = 1;
 
+	/* ---------- Selecteur de polices avec apercu ---------- */
+
+	// Le <select> natif reste en place, masque, et garde le role de source de verite : sa
+	// valeur et son evenement 'change' continuent de piloter tout le code existant. On ne
+	// superpose qu'une couche d'affichage, ou chaque nom est ecrit dans sa propre police.
+	// Necessaire parce que Safari sur iOS dessine les <option> en police systeme et ignore
+	// tout font-family pose dessus : juger un rendu obligeait donc a l'essayer.
+	var fontPickers = [];
+
+	function buildFontPicker( sel ) {
+		if ( !sel || !sel.parentNode ) { return; }
+		var wrap = document.createElement( 'div' );
+		wrap.className = 'fontPicker';
+		var trigger = document.createElement( 'button' );
+		trigger.type = 'button';
+		trigger.className = 'fontPickerTrigger';
+		var list = document.createElement( 'div' );
+		list.className = 'fontPickerList';
+		list.hidden = true;
+		wrap.appendChild( trigger );
+		wrap.appendChild( list );
+		sel.parentNode.insertBefore( wrap, sel );
+		sel.classList.add( 'pickerHidden' );
+
+		trigger.addEventListener( 'click', function ( e ) {
+			e.stopPropagation();
+			var wasClosed = list.hidden;
+			closeFontPickers();
+			list.hidden = !wasClosed;
+		} );
+		// Empeche la fermeture globale de se declencher depuis l'interieur de la liste.
+		list.addEventListener( 'click', function ( e ) { e.stopPropagation(); } );
+
+		var picker = { sel: sel, trigger: trigger, list: list };
+		fontPickers.push( picker );
+		refreshFontPicker( picker );
+	}
+
+	function fontLabelInto( el, option ) {
+		el.innerHTML = '';
+		var name = document.createElement( 'span' );
+		name.className = 'fontPickerName';
+		name.textContent = option ? ( option.getAttribute( 'data-name' ) || option.textContent ) : '\u2014';
+		var family = option && option.getAttribute( 'data-family' );
+		if ( family ) { name.style.fontFamily = '"' + family + '", sans-serif'; }
+		el.appendChild( name );
+		var hint = option && option.getAttribute( 'data-hint' );
+		if ( hint ) {
+			var h = document.createElement( 'span' );
+			h.className = 'fontPickerHint';
+			h.textContent = hint;
+			el.appendChild( h );
+		}
+	}
+
+	function refreshFontPicker( p ) {
+		p.list.innerHTML = '';
+		var current = p.sel.value;
+		Array.prototype.slice.call( p.sel.options ).forEach( function ( o ) {
+			if ( !o.value ) { return; } // entree "aucune police chargee"
+			var item = document.createElement( 'button' );
+			item.type = 'button';
+			item.className = 'fontPickerItem' + ( o.value === current ? ' current' : '' );
+			fontLabelInto( item, o );
+			item.addEventListener( 'click', function () {
+				p.sel.value = o.value;
+				p.list.hidden = true;
+				refreshFontPickers();
+				p.sel.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+			} );
+			p.list.appendChild( item );
+		} );
+		var sel0 = p.sel.selectedOptions && p.sel.selectedOptions[ 0 ];
+		fontLabelInto( p.trigger, ( sel0 && sel0.value ) ? sel0 : null );
+		p.trigger.disabled = !!p.sel.disabled;
+	}
+
+	function refreshFontPickers() { fontPickers.forEach( refreshFontPicker ); }
+	function closeFontPickers() { fontPickers.forEach( function ( p ) { p.list.hidden = true; } ); }
+	document.addEventListener( 'click', closeFontPickers );
+
 	function findFont( id ) {
 		for ( var i = 0; i < fontLibrary.length; i++ ) { if ( fontLibrary[ i ].id === id ) { return fontLibrary[ i ]; } }
 		return null;
@@ -1466,11 +1597,19 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			fontLibrary.forEach( function ( f ) {
 				var o = document.createElement( 'option' );
 				o.value = String( f.id );
-				o.textContent = f.name;
+				o.textContent = f.hint ? ( f.name + ' \u2013 ' + f.hint ) : f.name;
+				// Donnees reprises par le selecteur avec apercu (cf refreshFontPicker).
+				o.setAttribute( 'data-name', f.name );
+				o.setAttribute( 'data-hint', f.hint || '' );
+				if ( f.cssFamily ) {
+					o.setAttribute( 'data-family', f.cssFamily );
+					o.style.fontFamily = '"' + f.cssFamily + '", sans-serif'; // utile la ou le natif l'honore
+				}
 				sel.appendChild( o );
 			} );
 			if ( prevValue && findFont( parseInt( prevValue, 10 ) ) ) { sel.value = prevValue; }
 		} );
+		refreshFontPickers();
 	}
 
 	/* ---------- Polices fournies avec l'application ---------- */
@@ -1485,13 +1624,30 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// l'arrivee des polices restantes ne doit plus modifier sa selection.
 	var userPickedFont = false;
 
+	// name : ecrit dans la police elle-meme dans le selecteur.
+	// hint : reste en police d'interface, sinon la description devient illisible avec une
+	//        police tres typee (Bebas est en capitales, par exemple).
 	var BUNDLED_FONTS = [
-		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue \u2013 condensé, majuscules' },
-		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold \u2013 géométrique' },
-		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black \u2013 très gras' },
-		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black \u2013 neutre' },
-		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold \u2013 arrondi' }
+		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue', hint: 'condensé, capitales' },
+		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold', hint: 'géométrique' },
+		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black', hint: 'très gras' },
+		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black', hint: 'neutre' },
+		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold', hint: 'arrondi' }
 	];
+
+	// Enregistre la police aupres du moteur de rendu, pour pouvoir ensuite l'utiliser en
+	// CSS et donc afficher son nom dans sa propre typographie. C'est purement cosmetique :
+	// le trace des lettres, lui, passe toujours par opentype.js.
+	function registerCssFont( family, buffer ) {
+		if ( !window.FontFace || !document.fonts ) { return; }
+		try {
+			var face = new FontFace( family, buffer );
+			face.load().then( function ( f ) {
+				document.fonts.add( f );
+				refreshFontPickers(); // la police est arrivee : on redessine les apercus
+			} ).catch( function () {} );
+		} catch ( e ) { /* apercu indisponible : le selecteur reste lisible en police systeme */ }
+	}
 
 	function loadBundledFonts() {
 		if ( typeof fetch !== 'function' ) { return; }
@@ -1502,7 +1658,12 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 					return r.arrayBuffer();
 				} )
 				.then( function ( buf ) {
-					fontLibrary.push( { id: nextFontId++, name: def.name, otFont: opentype.parse( buf ), order: index } );
+					var cssFamily = 'FlowFont' + index;
+					registerCssFont( cssFamily, buf ); // avant l'analyse : le tampon reste intact
+					fontLibrary.push( {
+						id: nextFontId++, name: def.name, hint: def.hint,
+						cssFamily: cssFamily, otFont: opentype.parse( buf ), order: index
+					} );
 					// Les reponses n'arrivent pas dans l'ordre des requetes : on retrie pour que
 					// la liste deroulante presente toujours les polices dans le meme ordre.
 					// Les polices chargees par l'utilisateur (pas d'ordre defini) passent apres.
@@ -1522,6 +1683,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 				} );
 		} );
 	}
+	[ els.fontSelect, els.editFontSelect, els.toolbarFontSelect ].forEach( buildFontPicker );
 	loadBundledFonts();
 
 	function loadFontFile( file ) {
@@ -1904,6 +2066,45 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 
 	// Rayon d'accroche autour d'une poignee. Nettement plus large au doigt qu'a la souris :
 	// sans cela, attraper la poignee de rotation sur telephone releve de l'exploit.
+	/* ---------- Aimantation sur les axes centraux du gabarit ---------- */
+
+	var CENTER_SNAP_PX = 8; // rayon d'accroche, exprime en pixels ECRAN
+
+	// Le seuil est volontairement en pixels ecran et non en millimetres : converti une fois
+	// pour toutes en millimetres, il deviendrait enorme a fort zoom et rendrait impossible
+	// tout placement fin, tout en devenant inatteignable a faible zoom. Rapporte au zoom
+	// courant, l'accroche se declenche toujours a la meme distance percue.
+	function snapToCenter( layer ) {
+		var tol = CENTER_SNAP_PX / paper.view.zoom;
+		var p = layer.item.position;
+		var x = p.x, y = p.y;
+		var onX = Math.abs( x - W / 2 ) <= tol;
+		var onY = Math.abs( y - H / 2 ) <= tol;
+		if ( onX ) { x = W / 2; }
+		if ( onY ) { y = H / 2; }
+		if ( onX || onY ) { layer.item.position = new paper.Point( x, y ); }
+		showCenterGuides( onX, onY );
+	}
+
+	function showCenterGuides( onX, onY ) {
+		var m = Math.max( W, H ) * 0.07;
+		// Epaisseur rapportee au zoom : un trait defini en millimetres deviendrait un pave
+		// a fort zoom et disparaitrait a faible zoom.
+		var sw = 1.1 / paper.view.zoom;
+		guideV.visible = !!onX;
+		guideH.visible = !!onY;
+		if ( onX ) {
+			guideV.segments = [ new paper.Point( W / 2, -m ), new paper.Point( W / 2, H + m ) ];
+			guideV.strokeWidth = sw;
+			guideV.dashArray = [ sw * 5, sw * 4 ];
+		}
+		if ( onY ) {
+			guideH.segments = [ new paper.Point( -m, H / 2 ), new paper.Point( W + m, H / 2 ) ];
+			guideH.strokeWidth = sw;
+			guideH.dashArray = [ sw * 5, sw * 4 ];
+		}
+	}
+
 	function handleTolerance() { return ( HANDLE_PX * ( COARSE_POINTER ? 2.6 : 1.4 ) ) / paper.view.zoom; }
 
 	/* ---------- Magnetisme de rotation ---------- */
@@ -1988,10 +2189,11 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			}
 		} else {
 			sel.item.position = sel.item.position.add( event.delta );
+			snapToCenter( sel );
 			updateHandles();
 		}
 	};
-	tool.onMouseUp = function () { dragMode = null; setSnapFeedback( false ); };
+	tool.onMouseUp = function () { dragMode = null; setSnapFeedback( false ); showCenterGuides( false, false ); };
 
 	// Curseur adapte quand la souris survole une poignee (retour visuel avant le clic).
 	canvas.addEventListener( 'mousemove', function ( e ) {
@@ -2183,7 +2385,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		else if ( e.key === 'ArrowUp' ) { sel.item.position = sel.item.position.add( [ 0, -step ] ); }
 		else if ( e.key === 'ArrowDown' ) { sel.item.position = sel.item.position.add( [ 0, step ] ); }
 		else { moved = false; }
-		if ( moved ) { e.preventDefault(); updateHandles(); }
+		if ( moved ) { e.preventDefault(); snapToCenter( sel ); updateHandles(); }
 	} );
 
 	function applyRotation( layer, deg ) {
