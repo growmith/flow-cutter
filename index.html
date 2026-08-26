@@ -118,10 +118,33 @@
 	.fontPickerList {
 		position: absolute; left: 0; right: 0; top: calc(100% + 5px);
 		z-index: 60;
-		max-height: 292px; overflow-y: auto; overscroll-behavior: contain;
-		padding: 4px;
+		max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
+		padding: 0 4px 4px;
 		background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px;
 		box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+	}
+
+	/* Le champ de recherche reste accroche en haut : avec 119 polices, il faut pouvoir
+	   filtrer sans remonter toute la liste. */
+	.fontPickerSearch {
+		position: sticky; top: 0; z-index: 2;
+		width: 100%; margin: 0 0 4px;
+		padding: 9px 10px;
+		font: inherit; font-size: 16px;   /* 16px : en dessous, Safari iOS zoome a la mise au point */
+		color: var(--text);
+		background: var(--panel);
+		border: none; border-bottom: 1px solid var(--border);
+		border-radius: 9px 9px 0 0;
+		outline: none;
+		-webkit-appearance: none;
+	}
+	.fontPickerSearch::placeholder { color: var(--text-dim); }
+
+	.fontPickerGroup {
+		padding: 9px 10px 4px;
+		font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+		color: var(--text-dim);
 	}
 	.fontPickerList[hidden] { display: none; }
 	.fontPickerItem {
@@ -405,7 +428,7 @@
 	     en une seconde a "est-ce que la mise a jour est bien arrivee sur l'appareil ?",
 	     ce qu'il ne peut pas faire s'il faut d'abord deplier une feuille et la faire
 	     defiler jusqu'en bas pour le trouver. A incrementer a chaque deploiement. -->
-	<span id="buildTag">2026.08.26-12</span>
+	<span id="buildTag">2026.08.26-14</span>
 </header>
 
 <main>
@@ -456,7 +479,7 @@
 			<label>Police à utiliser</label>
 			<select id="fontSelect"><option value="">Aucune police chargée</option></select>
 		</div>
-		<p class="hint" style="margin:-2px 0 16px;">Cinq polices sont fournies, et tu peux en charger d'autres. Le texte est converti en tracés vectoriels à partir du fichier de police : rendu garanti identique partout, y compris dans LightBurn, sans dépendre d'aucune police installée sur l'ordinateur qui ouvre le fichier. Toujours affiché et exporté en blanc.</p>
+		<p class="hint" style="margin:-2px 0 16px;">119 polices sont fournies, classées par style et filtrables par nom, et tu peux en charger d'autres. Le texte est converti en tracés vectoriels à partir du fichier de police : rendu garanti identique partout, y compris dans LightBurn, sans dépendre d'aucune police installée sur l'ordinateur qui ouvre le fichier. Toujours affiché et exporté en blanc.</p>
 
 		<div class="field">
 			<label>Texte</label>
@@ -1090,6 +1113,7 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 			if ( els.editFontSelect ) { els.editFontSelect.value = String( sel.fontId ); }
 			if ( els.toolbarFontSelect ) { els.toolbarFontSelect.value = String( sel.fontId ); }
 		}
+		refreshFontPickerLabels(); // sinon le declencheur reste sur l'ancienne police
 		updateTextToolbar();
 	}
 
@@ -1526,7 +1550,22 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		// Empeche la fermeture globale de se declencher depuis l'interieur de la liste.
 		list.addEventListener( 'click', function ( e ) { e.stopPropagation(); } );
 
-		var picker = { sel: sel, trigger: trigger, list: list };
+		var picker = { sel: sel, trigger: trigger, list: list, query: '', body: null, observer: null };
+
+		// Charge l'apercu d'une police au moment ou son entree approche de l'ecran. Sans cela,
+		// ouvrir la liste declencherait 119 telechargements pour huit lignes visibles.
+		// rootMargin : on anticipe d'un demi-ecran pour que le rendu soit deja pret au
+		// moment ou l'entree arrive reellement sous les yeux.
+		if ( window.IntersectionObserver ) {
+			picker.observer = new IntersectionObserver( function ( entries ) {
+				entries.forEach( function ( e ) {
+					if ( !e.isIntersecting ) { return; }
+					ensureFontCss( e.target._fontEntry );
+					picker.observer.unobserve( e.target );
+				} );
+			}, { root: list, rootMargin: '260px 0px' } );
+		}
+
 		fontPickers.push( picker );
 		refreshFontPicker( picker );
 	}
@@ -1541,29 +1580,126 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 		el.appendChild( name );
 	}
 
+	// Construit le contenu de la liste : champ de recherche, puis les polices regroupees
+	// par categorie. Avec 119 entrees, une liste plate serait inexploitable.
 	function refreshFontPicker( p ) {
 		p.list.innerHTML = '';
 		var current = p.sel.value;
+
+		var search = document.createElement( 'input' );
+		search.type = 'search';
+		search.className = 'fontPickerSearch';
+		search.placeholder = 'Rechercher une police\u2026';
+		search.value = p.query || '';
+		// Sans cela, taper dans le champ referme la liste : le clic qui donne le focus
+		// remonterait jusqu'au document, ou la fermeture globale est branchee.
+		search.addEventListener( 'click', function ( e ) { e.stopPropagation(); } );
+		search.addEventListener( 'input', function () {
+			p.query = search.value;
+			filterFontPicker( p );
+		} );
+		p.list.appendChild( search );
+
+		var body = document.createElement( 'div' );
+		body.className = 'fontPickerBody';
+		p.list.appendChild( body );
+		p.body = body;
+
+		// Regroupement par categorie, dans l'ordre declare. Les polices chargees par
+		// l'utilisateur, qui n'appartiennent a aucune categorie du catalogue, ferment la marche.
+		var groupes = FONT_CATEGORIES.map( function ( c ) { return { key: c.key, label: c.label, items: [] }; } );
+		groupes.push( { key: 'perso', label: 'Tes polices', items: [] } );
+
 		Array.prototype.slice.call( p.sel.options ).forEach( function ( o ) {
 			if ( !o.value ) { return; } // entree "aucune police chargee"
-			var item = document.createElement( 'button' );
-			item.type = 'button';
-			item.className = 'fontPickerItem' + ( o.value === current ? ' current' : '' );
-			fontLabelInto( item, o );
-			item.addEventListener( 'click', function () {
-				p.sel.value = o.value;
-				p.list.hidden = true;
-				refreshFontPickers();
-				p.sel.dispatchEvent( new Event( 'change', { bubbles: true } ) );
-			} );
-			p.list.appendChild( item );
+			var entry = findFont( parseInt( o.value, 10 ) );
+			var key = ( entry && entry.cat ) || 'perso';
+			var g = null;
+			for ( var i = 0; i < groupes.length; i++ ) { if ( groupes[ i ].key === key ) { g = groupes[ i ]; break; } }
+			if ( g ) { g.items.push( { option: o, entry: entry } ); }
 		} );
+
+		groupes.forEach( function ( g ) {
+			if ( !g.items.length ) { return; }
+			var titre = document.createElement( 'div' );
+			titre.className = 'fontPickerGroup';
+			titre.textContent = g.label;
+			body.appendChild( titre );
+
+			g.items.forEach( function ( it ) {
+				var item = document.createElement( 'button' );
+				item.type = 'button';
+				item.className = 'fontPickerItem' + ( it.option.value === current ? ' current' : '' );
+				item.setAttribute( 'data-nom', ( it.entry && it.entry.name || it.option.textContent ).toLowerCase() );
+				fontLabelInto( item, it.option );
+				item.addEventListener( 'click', function () {
+					p.sel.value = it.option.value;
+					p.list.hidden = true;
+					refreshFontPickers();
+					p.sel.dispatchEvent( new Event( 'change', { bubbles: true } ) );
+				} );
+				body.appendChild( item );
+				// L'apercu n'est telecharge que lorsque l'entree approche de l'ecran.
+				if ( p.observer && it.entry ) {
+					item._fontEntry = it.entry;
+					p.observer.observe( item );
+				}
+			} );
+		} );
+
+		if ( p.query ) { filterFontPicker( p ); }
+
 		var sel0 = p.sel.selectedOptions && p.sel.selectedOptions[ 0 ];
 		fontLabelInto( p.trigger, ( sel0 && sel0.value ) ? sel0 : null );
 		p.trigger.disabled = !!p.sel.disabled;
+		if ( sel0 && sel0.value ) { ensureFontCss( findFont( parseInt( sel0.value, 10 ) ) ); }
 	}
 
-	function refreshFontPickers() { fontPickers.forEach( refreshFontPicker ); }
+	// Filtrage sur le nom. Un titre de categorie disparait si aucune de ses polices ne reste.
+	function filterFontPicker( p ) {
+		if ( !p.body ) { return; }
+		var q = ( p.query || '' ).trim().toLowerCase();
+		var enfants = Array.prototype.slice.call( p.body.children );
+		var titreCourant = null, visiblesDansGroupe = 0;
+		enfants.forEach( function ( el ) {
+			if ( el.className === 'fontPickerGroup' ) {
+				if ( titreCourant ) { titreCourant.style.display = visiblesDansGroupe ? '' : 'none'; }
+				titreCourant = el; visiblesDansGroupe = 0;
+				return;
+			}
+			var visible = !q || ( el.getAttribute( 'data-nom' ) || '' ).indexOf( q ) !== -1;
+			el.style.display = visible ? '' : 'none';
+			if ( visible ) { visiblesDansGroupe++; }
+		} );
+		if ( titreCourant ) { titreCourant.style.display = visiblesDansGroupe ? '' : 'none'; }
+	}
+
+	// Garde-fou sur fontPickers : updateSelectionUI() est appelee des le premier setMode(),
+	// soit AVANT que ce tableau ne soit initialise, plus bas dans le script. La declaration
+	// var est bien remontee, mais pas l'affectation : la variable vaut alors undefined.
+	function refreshFontPickers() {
+		if ( !fontPickers ) { return; }
+		fontPickers.forEach( refreshFontPicker );
+	}
+
+	// Met a jour uniquement le libelle des declencheurs, sans reconstruire les listes.
+	// Appele a chaque changement de selection : reconstruire 119 entrees et leurs
+	// observateurs juste pour changer un mot serait disproportionne.
+	function refreshFontPickerLabels() {
+		if ( !fontPickers ) { return; }
+		fontPickers.forEach( function ( p ) {
+			var o = p.sel.selectedOptions && p.sel.selectedOptions[ 0 ];
+			fontLabelInto( p.trigger, ( o && o.value ) ? o : null );
+			p.trigger.disabled = !!p.sel.disabled;
+			if ( o && o.value ) { ensureFontCss( findFont( parseInt( o.value, 10 ) ) ); }
+			// Marque visuellement la nouvelle entree courante dans la liste deja construite.
+			if ( p.body ) {
+				Array.prototype.slice.call( p.body.querySelectorAll( '.fontPickerItem' ) ).forEach( function ( it ) {
+					it.classList.remove( 'current' );
+				} );
+			}
+		} );
+	}
 	function closeFontPickers() { fontPickers.forEach( function ( p ) { p.list.hidden = true; } ); }
 	document.addEventListener( 'click', closeFontPickers );
 
@@ -1615,67 +1751,234 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// l'arrivee des polices restantes ne doit plus modifier sa selection.
 	var userPickedFont = false;
 
-	// Le nom seul, ecrit dans la police elle-meme. Pas de description : l'apercu montre deja
-	// ce qu'une mention comme "condense" ou "arrondi" tentait de dire, et la ligne
-	// supplementaire doublait la hauteur de chaque entree pour rien.
-	var BUNDLED_FONTS = [
-		{ file: 'fonts/BebasNeue-Bold.otf', name: 'Bebas Neue' },
-		{ file: 'fonts/Poppins-Bold.ttf',   name: 'Poppins Bold' },
-		{ file: 'fonts/Lato-Black.ttf',     name: 'Lato Black' },
-		{ file: 'fonts/Inter-Black.otf',    name: 'Inter Black' },
-		{ file: 'fonts/Comfortaa-Bold.ttf', name: 'Comfortaa Bold' }
+	// Catalogue des polices fournies. f = nom de fichier (sans chemin ni extension),
+	// n = nom affiche, c = categorie.
+	//
+	// Rien n'est telecharge ici : ce tableau ne fait que declarer ce qui existe. Les 119
+	// fichiers pesent 7,3 Mo au total ; les charger au demarrage serait absurde pour une
+	// liste qui en montre huit a la fois. Chaque police n'est recuperee qu'a la demande,
+	// soit pour afficher son apercu quand son entree devient visible a l'ecran, soit pour
+	// tracer du texte quand elle est reellement choisie.
+	var FONT_CATEGORIES = [
+		{ key: 'gras',       label: 'Grasses et affiche' },
+		{ key: 'peinture',   label: 'Peinture, marqueur, tag' },
+		{ key: 'manuscrite', label: 'Manuscrites' },
+		{ key: 'carre',      label: 'Carrées et techno' },
+		{ key: 'deco',       label: 'Décoratives' }
 	];
 
-	// Enregistre la police aupres du moteur de rendu, pour pouvoir ensuite l'utiliser en
-	// CSS et donc afficher son nom dans sa propre typographie. C'est purement cosmetique :
-	// le trace des lettres, lui, passe toujours par opentype.js.
-	function registerCssFont( family, buffer ) {
-		if ( !window.FontFace || !document.fonts ) { return; }
-		try {
-			var face = new FontFace( family, buffer );
-			face.load().then( function ( f ) {
-				document.fonts.add( f );
-				refreshFontPickers(); // la police est arrivee : on redessine les apercus
-			} ).catch( function () {} );
-		} catch ( e ) { /* apercu indisponible : le selecteur reste lisible en police systeme */ }
+	var DEFAULT_FONT_FILE = 'bebas-neue';
+
+	var BUNDLED_FONTS = [
+		{ f: 'alfa-slab-one', n: 'Alfa Slab One', c: 'gras' },
+		{ f: 'anton', n: 'Anton', c: 'gras' },
+		{ f: 'archivo-black', n: 'Archivo Black', c: 'gras' },
+		{ f: 'bangers', n: 'Bangers', c: 'gras' },
+		{ f: 'bebas-neue', n: 'Bebas Neue', c: 'gras' },
+		{ f: 'black-ops-one', n: 'Black Ops One', c: 'gras' },
+		{ f: 'boogaloo', n: 'Boogaloo', c: 'gras' },
+		{ f: 'bowlby-one', n: 'Bowlby One', c: 'gras' },
+		{ f: 'bungee', n: 'Bungee', c: 'gras' },
+		{ f: 'chewy', n: 'Chewy', c: 'gras' },
+		{ f: 'fjalla-one', n: 'Fjalla One', c: 'gras' },
+		{ f: 'lilita-one', n: 'Lilita One', c: 'gras' },
+		{ f: 'luckiest-guy', n: 'Luckiest Guy', c: 'gras' },
+		{ f: 'oswald', n: 'Oswald', c: 'gras' },
+		{ f: 'passion-one', n: 'Passion One', c: 'gras' },
+		{ f: 'patua-one', n: 'Patua One', c: 'gras' },
+		{ f: 'racing-sans-one', n: 'Racing Sans One', c: 'gras' },
+		{ f: 'rammetto-one', n: 'Rammetto One', c: 'gras' },
+		{ f: 'russo-one', n: 'Russo One', c: 'gras' },
+		{ f: 'shrikhand', n: 'Shrikhand', c: 'gras' },
+		{ f: 'sigmar-one', n: 'Sigmar One', c: 'gras' },
+		{ f: 'squada-one', n: 'Squada One', c: 'gras' },
+		{ f: 'staatliches', n: 'Staatliches', c: 'gras' },
+		{ f: 'titan-one', n: 'Titan One', c: 'gras' },
+		{ f: 'ultra', n: 'Ultra', c: 'gras' },
+		{ f: 'caveat-brush', n: 'Caveat Brush', c: 'peinture' },
+		{ f: 'gochi-hand', n: 'Gochi Hand', c: 'peinture' },
+		{ f: 'just-another-hand', n: 'Just Another Hand', c: 'peinture' },
+		{ f: 'nanum-pen-script', n: 'Nanum Pen Script', c: 'peinture' },
+		{ f: 'permanent-marker', n: 'Permanent Marker', c: 'peinture' },
+		{ f: 'reenie-beanie', n: 'Reenie Beanie', c: 'peinture' },
+		{ f: 'rock-salt', n: 'Rock Salt', c: 'peinture' },
+		{ f: 'rubik-beastly', n: 'Rubik Beastly', c: 'peinture' },
+		{ f: 'rubik-broken-fax', n: 'Rubik Broken Fax', c: 'peinture' },
+		{ f: 'rubik-bubbles', n: 'Rubik Bubbles', c: 'peinture' },
+		{ f: 'rubik-burned', n: 'Rubik Burned', c: 'peinture' },
+		{ f: 'rubik-distressed', n: 'Rubik Distressed', c: 'peinture' },
+		{ f: 'rubik-gemstones', n: 'Rubik Gemstones', c: 'peinture' },
+		{ f: 'rubik-glitch', n: 'Rubik Glitch', c: 'peinture' },
+		{ f: 'rubik-iso', n: 'Rubik Iso', c: 'peinture' },
+		{ f: 'rubik-marker-hatch', n: 'Rubik Marker Hatch', c: 'peinture' },
+		{ f: 'rubik-maze', n: 'Rubik Maze', c: 'peinture' },
+		{ f: 'rubik-microbe', n: 'Rubik Microbe', c: 'peinture' },
+		{ f: 'rubik-puddles', n: 'Rubik Puddles', c: 'peinture' },
+		{ f: 'rubik-scribble', n: 'Rubik Scribble', c: 'peinture' },
+		{ f: 'rubik-spray-paint', n: 'Rubik Spray Paint', c: 'peinture' },
+		{ f: 'rubik-storm', n: 'Rubik Storm', c: 'peinture' },
+		{ f: 'rubik-vinyl', n: 'Rubik Vinyl', c: 'peinture' },
+		{ f: 'rubik-wet-paint', n: 'Rubik Wet Paint', c: 'peinture' },
+		{ f: 'sedgwick-ave', n: 'Sedgwick Ave', c: 'peinture' },
+		{ f: 'sedgwick-ave-display', n: 'Sedgwick Ave Display', c: 'peinture' },
+		{ f: 'shadows-into-light', n: 'Shadows Into Light', c: 'peinture' },
+		{ f: 'alex-brush', n: 'Alex Brush', c: 'manuscrite' },
+		{ f: 'allura', n: 'Allura', c: 'manuscrite' },
+		{ f: 'amatic-sc', n: 'Amatic SC', c: 'manuscrite' },
+		{ f: 'architects-daughter', n: 'Architects Daughter', c: 'manuscrite' },
+		{ f: 'caveat', n: 'Caveat', c: 'manuscrite' },
+		{ f: 'cedarville-cursive', n: 'Cedarville Cursive', c: 'manuscrite' },
+		{ f: 'courgette', n: 'Courgette', c: 'manuscrite' },
+		{ f: 'damion', n: 'Damion', c: 'manuscrite' },
+		{ f: 'dancing-script', n: 'Dancing Script', c: 'manuscrite' },
+		{ f: 'great-vibes', n: 'Great Vibes', c: 'manuscrite' },
+		{ f: 'homemade-apple', n: 'Homemade Apple', c: 'manuscrite' },
+		{ f: 'indie-flower', n: 'Indie Flower', c: 'manuscrite' },
+		{ f: 'kalam', n: 'Kalam', c: 'manuscrite' },
+		{ f: 'kaushan-script', n: 'Kaushan Script', c: 'manuscrite' },
+		{ f: 'la-belle-aurore', n: 'La Belle Aurore', c: 'manuscrite' },
+		{ f: 'lobster', n: 'Lobster', c: 'manuscrite' },
+		{ f: 'lobster-two', n: 'Lobster Two', c: 'manuscrite' },
+		{ f: 'marck-script', n: 'Marck Script', c: 'manuscrite' },
+		{ f: 'pacifico', n: 'Pacifico', c: 'manuscrite' },
+		{ f: 'parisienne', n: 'Parisienne', c: 'manuscrite' },
+		{ f: 'patrick-hand', n: 'Patrick Hand', c: 'manuscrite' },
+		{ f: 'sacramento', n: 'Sacramento', c: 'manuscrite' },
+		{ f: 'satisfy', n: 'Satisfy', c: 'manuscrite' },
+		{ f: 'tangerine', n: 'Tangerine', c: 'manuscrite' },
+		{ f: 'yellowtail', n: 'Yellowtail', c: 'manuscrite' },
+		{ f: 'audiowide', n: 'Audiowide', c: 'carre' },
+		{ f: 'chakra-petch', n: 'Chakra Petch', c: 'carre' },
+		{ f: 'iceland', n: 'Iceland', c: 'carre' },
+		{ f: 'kanit', n: 'Kanit', c: 'carre' },
+		{ f: 'major-mono-display', n: 'Major Mono Display', c: 'carre' },
+		{ f: 'megrim', n: 'Megrim', c: 'carre' },
+		{ f: 'michroma', n: 'Michroma', c: 'carre' },
+		{ f: 'monoton', n: 'Monoton', c: 'carre' },
+		{ f: 'orbitron', n: 'Orbitron', c: 'carre' },
+		{ f: 'press-start-2p', n: 'Press Start 2P', c: 'carre' },
+		{ f: 'quantico', n: 'Quantico', c: 'carre' },
+		{ f: 'rajdhani', n: 'Rajdhani', c: 'carre' },
+		{ f: 'saira-stencil-one', n: 'Saira Stencil One', c: 'carre' },
+		{ f: 'share-tech-mono', n: 'Share Tech Mono', c: 'carre' },
+		{ f: 'silkscreen', n: 'Silkscreen', c: 'carre' },
+		{ f: 'stardos-stencil', n: 'Stardos Stencil', c: 'carre' },
+		{ f: 'syncopate', n: 'Syncopate', c: 'carre' },
+		{ f: 'teko', n: 'Teko', c: 'carre' },
+		{ f: 'unica-one', n: 'Unica One', c: 'carre' },
+		{ f: 'vt323', n: 'VT323', c: 'carre' },
+		{ f: 'wallpoet', n: 'Wallpoet', c: 'carre' },
+		{ f: 'zen-dots', n: 'Zen Dots', c: 'carre' },
+		{ f: 'abril-fatface', n: 'Abril Fatface', c: 'deco' },
+		{ f: 'bevan', n: 'Bevan', c: 'deco' },
+		{ f: 'bungee-inline', n: 'Bungee Inline', c: 'deco' },
+		{ f: 'bungee-outline', n: 'Bungee Outline', c: 'deco' },
+		{ f: 'bungee-shade', n: 'Bungee Shade', c: 'deco' },
+		{ f: 'butcherman', n: 'Butcherman', c: 'deco' },
+		{ f: 'cabin-sketch', n: 'Cabin Sketch', c: 'deco' },
+		{ f: 'creepster', n: 'Creepster', c: 'deco' },
+		{ f: 'eater', n: 'Eater', c: 'deco' },
+		{ f: 'faster-one', n: 'Faster One', c: 'deco' },
+		{ f: 'frijole', n: 'Frijole', c: 'deco' },
+		{ f: 'londrina-outline', n: 'Londrina Outline', c: 'deco' },
+		{ f: 'monofett', n: 'Monofett', c: 'deco' },
+		{ f: 'nosifer', n: 'Nosifer', c: 'deco' },
+		{ f: 'poller-one', n: 'Poller One', c: 'deco' },
+		{ f: 'righteous', n: 'Righteous', c: 'deco' },
+		{ f: 'rye', n: 'Rye', c: 'deco' },
+		{ f: 'sancreek', n: 'Sancreek', c: 'deco' },
+		{ f: 'slackey', n: 'Slackey', c: 'deco' },
+		{ f: 'vast-shadow', n: 'Vast Shadow', c: 'deco' }
+	];
+
+	/* ---------- Chargement des polices, a la demande ---------- */
+
+	// Le catalogue est declare d'emblee dans fontLibrary, sans aucun telechargement : la
+	// liste est donc complete et utilisable des le premier affichage. Chaque fichier n'est
+	// recupere qu'au moment ou il sert vraiment, et pour deux usages distincts :
+	//
+	//   - l'apercu, quand l'entree devient visible dans la liste : la police est alors
+	//     enregistree aupres du moteur de rendu pour etre utilisable en CSS ;
+	//   - le trace, quand la police est reellement choisie : elle est alors analysee par
+	//     opentype.js pour en extraire les contours des glyphes.
+	//
+	// Les deux partagent un seul telechargement par police, memorise sur l'entree.
+	function fontBuffer( entry ) {
+		if ( !entry.bufPromise ) {
+			entry.bufPromise = fetch( entry.file ).then( function ( r ) {
+				if ( !r.ok ) { throw new Error( 'HTTP ' + r.status ); }
+				return r.arrayBuffer();
+			} );
+		}
+		return entry.bufPromise;
 	}
 
-	function loadBundledFonts() {
-		if ( typeof fetch !== 'function' ) { return; }
-		BUNDLED_FONTS.forEach( function ( def, index ) {
-			fetch( def.file )
-				.then( function ( r ) {
-					if ( !r.ok ) { throw new Error( 'HTTP ' + r.status ); }
-					return r.arrayBuffer();
-				} )
-				.then( function ( buf ) {
-					var cssFamily = 'FlowFont' + index;
-					registerCssFont( cssFamily, buf ); // avant l'analyse : le tampon reste intact
-					fontLibrary.push( {
-						id: nextFontId++, name: def.name,
-						cssFamily: cssFamily, otFont: opentype.parse( buf ), order: index
-					} );
-					// Les reponses n'arrivent pas dans l'ordre des requetes : on retrie pour que
-					// la liste deroulante presente toujours les polices dans le meme ordre.
-					// Les polices chargees par l'utilisateur (pas d'ordre defini) passent apres.
-					fontLibrary.sort( function ( a, b ) {
-						return ( a.order === undefined ? 999 : a.order ) - ( b.order === undefined ? 999 : b.order );
-					} );
-					// Tant que l'utilisateur n'a pas choisi lui-meme, on force la premiere police
-					// de la liste. Sans cela, la police par defaut etait celle dont le
-					// telechargement se terminait en premier, donc differente a chaque
-					// chargement de page selon la latence reseau.
-					renderFontOptions( userPickedFont ? undefined : fontLibrary[ 0 ].id );
-				} )
-				.catch( function ( e ) {
-					// Une police manquante ne doit pas empecher l'application de fonctionner :
-					// les autres restent disponibles, et le chargement manuel aussi.
-					if ( window.console ) { console.warn( 'Police fournie illisible : ' + def.file + ' (' + e.message + ')' ); }
-				} );
+	// Apercu. Une fois la police ajoutee a document.fonts, le navigateur redessine tout seul
+	// les elements qui la reclamaient : aucun rafraichissement de la liste n'est necessaire.
+	function ensureFontCss( entry ) {
+		if ( !entry || entry.cssAsked || !window.FontFace || !document.fonts ) { return; }
+		entry.cssAsked = true;
+		fontBuffer( entry ).then( function ( buf ) {
+			// Copie : FontFace et opentype.js lisent le meme tampon, chacun le sien.
+			return new FontFace( entry.cssFamily, buf.slice( 0 ) ).load();
+		} ).then( function ( f ) {
+			document.fonts.add( f );
+		} ).catch( function () {
+			entry.cssAsked = false; // nouvel essai possible plus tard
 		} );
 	}
+
+	// Trace. Appelee avant toute creation ou modification de calque texte.
+	function ensureFontParsed( entry, done ) {
+		if ( !entry ) { return; }
+		if ( entry.otFont ) { done( entry ); return; }
+		// Message affiche seulement si l'attente se fait sentir : sur un reseau local la
+		// police arrive en quelques dizaines de millisecondes, et un message qui apparait
+		// puis disparait aussitot n'est que du clignotement.
+		var attente = 'Chargement de la police ' + entry.name + '\u2026';
+		var minuteur = setTimeout( function () { log( attente, false ); }, 250 );
+		var fini = function () {
+			clearTimeout( minuteur );
+			// On n'efface que NOTRE message : entre-temps, une autre action a pu en afficher un.
+			if ( els.status.textContent === attente ) { log( '', false ); }
+		};
+		fontBuffer( entry ).then( function ( buf ) {
+			if ( !entry.otFont ) { entry.otFont = opentype.parse( buf.slice( 0 ) ); }
+			fini();
+			done( entry );
+		} ).catch( function ( e ) {
+			clearTimeout( minuteur );
+			entry.bufPromise = null; // ne pas figer l'echec : un nouvel essai doit pouvoir aboutir
+			log( 'Impossible de charger la police \u00ab\u00a0' + entry.name + '\u00a0\u00bb : ' + e.message, true );
+		} );
+	}
+
+	// Declare le catalogue. Aucun reseau ici.
+	function registerBundledFonts() {
+		BUNDLED_FONTS.forEach( function ( def, index ) {
+			fontLibrary.push( {
+				id: nextFontId++,
+				name: def.n,
+				cat: def.c,
+				file: 'fonts/' + def.f + '.ttf',
+				cssFamily: 'FlowFont_' + def.f.replace( /-/g, '_' ),
+				otFont: null,
+				order: index
+			} );
+		} );
+		// Police par defaut designee explicitement, et transmise des la construction de la
+		// liste. La designer apres coup faisait afficher puis charger l'apercu de la premiere
+		// entree du catalogue avant d'etre remplacee : un telechargement pour rien.
+		var def = null;
+		for ( var i = 0; i < fontLibrary.length; i++ ) {
+			if ( fontLibrary[ i ].file === 'fonts/' + DEFAULT_FONT_FILE + '.ttf' ) { def = fontLibrary[ i ]; break; }
+		}
+		renderFontOptions( def ? def.id : undefined );
+		if ( def ) { ensureFontParsed( def, function () {} ); } // prete des le premier texte saisi
+	}
+
 	[ els.fontSelect, els.editFontSelect, els.toolbarFontSelect ].forEach( buildFontPicker );
-	loadBundledFonts();
+	registerBundledFonts();
 
 	function loadFontFile( file ) {
 		var reader = new FileReader();
@@ -1692,7 +1995,19 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 				var fam = otFont.names.fontFamily;
 				niceName = fam.fr || fam.en || niceName;
 			}
-			var entry = { id: nextFontId++, name: niceName, otFont: otFont };
+			var entry = {
+				id: nextFontId++, name: niceName, otFont: otFont,
+				cat: 'perso',
+				cssFamily: 'FlowFontUser' + nextFontId
+			};
+			// Apercu de la police chargee par l'utilisateur : meme traitement que les autres,
+			// a partir du tampon deja en memoire (aucun telechargement).
+			if ( window.FontFace && document.fonts ) {
+				try {
+					new FontFace( entry.cssFamily, reader.result.slice( 0 ) ).load()
+						.then( function ( f ) { document.fonts.add( f ); } ).catch( function () {} );
+				} catch ( e ) { /* apercu indisponible, sans consequence */ }
+			}
 			fontLibrary.push( entry );
 			renderFontOptions( entry.id );
 			log( 'Police chargee : ' + niceName + '.', false );
@@ -1774,9 +2089,14 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	// keepSheetClosed : appel venant de la cellule posee sur le dessin. On ne deplie alors
 	// pas la feuille, sinon elle recouvre immediatement le texte qu'on vient de creer.
 	function addTextLayer( content, fontId, keepSheetClosed ) {
-		var fontEntry = findFont( fontId );
-		if ( !fontEntry ) { log( 'Charge d\'abord une police (.ttf ou .otf) avant d\'ajouter du texte.', true ); return; }
+		var entry = findFont( fontId );
+		if ( !entry ) { log( 'Choisis d\'abord une police avant d\'ajouter du texte.', true ); return; }
+		// Le fichier de police n'est peut-etre pas encore telecharge (chargement a la
+		// demande) : on l'attend avant de tracer quoi que ce soit.
+		ensureFontParsed( entry, function () { addTextLayerWithFont( content, entry, keepSheetClosed ); } );
+	}
 
+	function addTextLayerWithFont( content, fontEntry, keepSheetClosed ) {
 		var outline = buildTextOutline( content, fontEntry.otFont, TEXT_DEFAULT_SIZE_MM );
 		if ( outline.children.length === 0 ) {
 			outline.remove();
@@ -1822,10 +2142,12 @@ var opentype=(()=>{var bn=Object.defineProperty;var ho=Object.getOwnPropertyDesc
 	function editTextLayer( layer, newContent, newFontId ) {
 		if ( !layer || layer.kind !== 'text' ) { return; }
 		var content = ( newContent !== null && newContent !== undefined && newContent !== '' ) ? newContent : layer.textContent;
-		var fontId = newFontId || layer.fontId;
-		var fontEntry = findFont( fontId );
-		if ( !fontEntry ) { log( 'Police introuvable : recharge le fichier .ttf/.otf puis reessaie.', true ); updateSelectionUI(); return; }
+		var entry = findFont( newFontId || layer.fontId );
+		if ( !entry ) { log( 'Police introuvable : recharge le fichier .ttf/.otf puis reessaie.', true ); updateSelectionUI(); return; }
+		ensureFontParsed( entry, function () { editTextLayerWithFont( layer, content, entry ); } );
+	}
 
+	function editTextLayerWithFont( layer, content, fontEntry ) {
 		var outline = buildTextOutline( content, fontEntry.otFont, TEXT_DEFAULT_SIZE_MM );
 		if ( outline.children.length === 0 ) {
 			outline.remove();
